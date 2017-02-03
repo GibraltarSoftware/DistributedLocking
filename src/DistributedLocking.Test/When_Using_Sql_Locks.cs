@@ -1,0 +1,178 @@
+﻿using System;
+using System.Diagnostics;
+using NUnit.Framework;
+
+namespace Gibraltar.DistributedLocking.Test
+{
+    [TestFixture]
+    public class When_Using_Sql_Locks
+    {
+        private const string ConnectionStringTemplate = "Data Source={0};Initial Catalog={1};Integrated Security=True;MultipleActiveResultSets=True;Network Library=dbmssocn";
+        private const string MultiprocessLockName = "LockRepository";
+        private const string DefaultLockDatabase = "lock_test";
+        private const string SecondLockDatabase = "tempdb";
+        private const string ThirdLockDatabase = "master";
+
+        [Test]
+        public void Can_Acquire_Lock()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+            {
+                Assert.IsNotNull(outerLock, "Unable to acquire lock");
+            }
+        }
+
+        [Test]
+        public void Can_Not_Aquire_Same_Lock_On_Another_Thread()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+            {
+                Assert.IsNotNull(outerLock, "Unable to acquire outer lock the repository");
+
+                using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+                {
+                    Assert.IsNull(otherLock, "Another thread was allowed to get the lock");
+                }
+            }
+        }
+
+        [Test]
+        public void Can_ReEnter_Lock_On_Same_Thread()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            // First test new re-entrant lock capability.
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+            {
+                Assert.IsNotNull(outerLock, "Unable to outer lock the repository");
+
+                // Now check that we can get the same lock on the same thread.
+                using (var middleLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                {
+                    Assert.IsNotNull(middleLock, "Unable to reenter the repository lock on the same thread");
+
+                    using (var innerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                    {
+                        Assert.IsNotNull(innerLock, "Unable to reenter the repository lock on the same thread twice");
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void Can_Not_Acquire_Same_Lock_In_Same_Scope()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            // Now test other scenarios while another thread holds the lock.
+            using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+            {
+                Assert.IsNotNull(testLock, "Unable to lock the repository");
+
+                //now that I have the test lock, it should fail if I try to get it again.
+                Assert.Catch<LockTimeoutException>(() =>
+                        {
+                            using (var failedLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                            {
+                                Assert.IsNull(failedLock, "Duplicate lock was allowed.");
+                            }
+                        });
+            }
+        }
+
+        [Test]
+        public void Can_Acquire_Different_Lock_In_Same_Scope()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            // Now test other scenarios while another thread holds the lock.
+            using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName + "_alternate", 0))
+            {
+                Assert.IsNotNull(otherLock, "Unable to establish first lock in scope.");
+
+                using (var testLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                {
+                    Assert.IsNotNull(testLock, "Unable to establish second lock in scope.");
+                }
+            }
+        }
+
+        [Test]
+        public void Can_Acquire_Same_Lock_In_Different_Scope()
+        {
+            var firstLockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            // Now test other scenarios while another thread holds the lock.
+            using (var testLock = firstLockManager.Lock(this, MultiprocessLockName, 0))
+            {
+                Assert.IsNotNull(testLock, "Unable to establish lock on first scope");
+
+                var secondLockManager = new DistributedLockManager(GetLockProvider(SecondLockDatabase));
+                using (var secondTestLock = secondLockManager.Lock(this, MultiprocessLockName, 0))
+                {
+                    Assert.IsNotNull(secondTestLock, "Unable to establish lock on second scope.");
+
+                    var thirdLockManager = new DistributedLockManager(GetLockProvider(ThirdLockDatabase));
+                    using (var thirdTestLock = thirdLockManager.Lock(this, MultiprocessLockName, 0))
+                    {
+                        Assert.IsNotNull(thirdTestLock, "Unable to establish lock on third scope.");
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void LockRepositoryTimeout()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+            {
+                Assert.IsNotNull(testLock, "Unable to lock the repository");
+
+                //now when we try to get it we should not, and should wait at least our timeout
+                var lockStart = DateTimeOffset.Now;
+                DistributedLock timeoutLock;
+                Assert.IsFalse(lockManager.TryLock(this, MultiprocessLockName, 5, out timeoutLock));
+                using (timeoutLock)
+                {
+                    //we shouldn't have the lock
+                    Assert.IsNull(timeoutLock, "Duplicate lock allowed");
+
+                    //and we should be within a reasonable delta of our timeout.
+                    var delay = DateTimeOffset.Now - lockStart;
+                    Trace.Write(string.Format("Repository Timeout Requested: {0} Actual: {1}", 5, delay.TotalSeconds));
+                    Assert.Greater(delay.TotalSeconds, 4.5, "Timeout happened too fast - {0} seconds", delay.TotalSeconds);
+                    Assert.Less(delay.TotalSeconds, 5.5, "Timeout happened too slow - {0} seconds", delay.TotalSeconds);
+                }
+            }
+        }
+
+        [Test]
+        public void Can_Acquire_Lock_Many_Times()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            var lockIterations = 1000;
+
+            for (var curIteration = 0; curIteration < lockIterations; curIteration++)
+            {
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                {
+                    Assert.IsNotNull(outerLock, "Unable to acquire lock on iteration {0:N0}", curIteration);
+                }
+            }
+        }
+
+        private SqlLockProvider GetLockProvider(string databaseName)
+        {
+            var connectionString = string.Format(ConnectionStringTemplate, ".", databaseName);
+
+            return new SqlLockProvider(connectionString);
+        }
+    }
+}
