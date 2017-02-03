@@ -1,0 +1,52 @@
+# Set default behaviour, in case users don't have core.autocrlf set.
+* text=auto
+
+# Explicitly declare text files we want to always be normalized and converted 
+# to native line endings on checkout.
+*.c text
+*.h text
+a text
+*.ascx text
+*.cd text
+*.cmd text
+*.coffee text
+*.config text
+*.cs text diff=csharp 
+*.cshtml text
+*.css text
+*.dtd text
+*.edmx text
+*.hsp text
+*.htm text
+*.html text
+*.js text
+*.json text
+*.msbuild text
+*.nuspec text
+*.resx text
+*.ruleset text
+*.StyleCop text
+*.targets text
+*.tt text
+*.txt text
+*.vb text
+*.vbhtml text
+*.vbs text
+*.wsf text
+*.xml text
+*.xunit text
+
+# Declare files that will always have CRLF line endings on checkout.
+*.sln text eol=crlf merge=union
+*.csproj text eol=crlf merge=union 
+*.vbproj text eol=crlf merge=union 
+
+# Denote all files that are truly binary and should not be modified.
+*.png binary
+*.jpg binary
+*.bmp binary
+*.dll binary
+*.gif binary
+*.jpg binary
+*.png binary
+*.snk binary
