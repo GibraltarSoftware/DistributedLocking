@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DistributedLocking.Test", "
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Dependencies", "Dependencies", "{CB86D103-1329-4C4C-8C82-AF3094C34AD8}"
 	ProjectSection(SolutionItems) = preProject
-		LICENSE = LICENSE
+		LICENSE.txt = LICENSE.txt
 		README.md = README.md
 	EndProjectSection
 EndProject
