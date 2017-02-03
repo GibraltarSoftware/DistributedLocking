@@ -25,7 +25,7 @@
 	<s:String x:Key="/Default/CodeStyle/FileHeader/FileHeaderRegionName/@EntryValue">File Header and License</s:String>
 	<s:String x:Key="/Default/CodeStyle/FileHeader/FileHeaderText/@EntryValue">/*&#xD;
    $FILENAME$&#xD;
-   Copyright 2013 Gibraltar Software, Inc.&#xD;
+   Copyright 2008-$CURRENT_YEAR$ Gibraltar Software, Inc.&#xD;
    &#xD;
    Licensed under the Apache License, Version 2.0 (the "License");&#xD;
    you may not use this file except in compliance with the License.&#xD;
