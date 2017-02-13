@@ -49,6 +49,27 @@ namespace Gibraltar.DistributedLocking.Test
         }
 
         [Test]
+        public void Can_Acquire_Lock_With_Unsafe_Name()
+        {
+            var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+
+            try
+            {
+                var unsafeLockName = "\"M<>\"\\a/ry/ h**ad:>> a\\/:*?\"<>| li*tt|le|| la\"mb.?";
+
+                using (var outerLock = lockManager.Lock(this, unsafeLockName, 0))
+                {
+                    Assert.IsNotNull(outerLock, "Unable to acquire the lock");
+                }
+            }
+            finally
+            {
+                Directory.Delete(lockScopePath);
+            }
+        }
+
+        [Test]
         public void Can_Not_Aquire_Same_Lock_On_Another_Thread()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
