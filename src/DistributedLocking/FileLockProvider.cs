@@ -21,6 +21,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Threading;
 using Gibraltar.DistributedLocking.Internal;
 using Microsoft.Win32.SafeHandles;
@@ -281,7 +282,17 @@ namespace Gibraltar.DistributedLocking
 
         private static string GetLockFileName(string indexPath, string lockName)
         {
-            return Path.Combine(indexPath, lockName + "." + LockFileExtension);
+            //we have to sanitize the lock name to a safe file name.
+            var adjustedLockName = string.Join("_", lockName.Split(Path.GetInvalidFileNameChars()));
+
+            if (lockName.Equals(adjustedLockName, StringComparison.OrdinalIgnoreCase) == false)
+            {
+                //since we did redact it we may have dropped a key variable between two locks, so we need
+                //to do something to restore the correct uniqueness.
+                adjustedLockName += lockName.GetHashCode();
+            }
+
+            return Path.Combine(indexPath, adjustedLockName + "." + LockFileExtension);
         }
     }
 }
