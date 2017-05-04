@@ -53,7 +53,7 @@ namespace Gibraltar.DistributedLocking.Internal
         public int PeekApplicationLock(string name, SqlLockMode lockMode)
         {
             int result;
-            using (var command = CreateCommand("SELECT APPLOCK_TEST('public', @Resource, @LockMode, @LockOwner)", GetConnection(), CommandType.StoredProcedure, true))
+            using (var command = CreateCommand("SELECT APPLOCK_TEST('public', @Resource, @LockMode, @LockOwner)", GetConnection(), CommandType.Text, true))
             {
                 CreateParameter(command, "Resource", DbType.String, ParameterDirection.Input, 255, name);
                 CreateParameter(command, "LockMode", DbType.String, ParameterDirection.Input, 32, lockMode.ToString());
