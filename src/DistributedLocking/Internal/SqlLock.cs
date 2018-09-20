@@ -49,7 +49,7 @@ namespace Gibraltar.DistributedLocking.Internal
         /// Determine if the requested lock can be acquired
         /// </summary>
         /// <remarks>This does not hold any locks outside of the call, making it less expensive for probing locks.</remarks>
-        /// <returns>0 if the lock was granted, 1 if it was granted only after waiting, negative numbers for various failures.</returns>
+        /// <returns>0 if the lock can't be granted, 1 if it can be.</returns>
         public int PeekApplicationLock(string name, SqlLockMode lockMode)
         {
             int result;
@@ -140,7 +140,7 @@ namespace Gibraltar.DistributedLocking.Internal
         }
 
         /// <summary>
-        /// Get a sql connection associated with this lock
+        /// Get a SQL connection associated with this lock
         /// </summary>
         private SqlConnection GetConnection()
         {

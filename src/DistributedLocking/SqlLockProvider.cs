@@ -47,6 +47,9 @@ namespace Gibraltar.DistributedLocking
             //parse it so we can create a nice name and force an option..
             var connStringBuilder = new SqlConnectionStringBuilder(_connectionString);
             Name = string.Format("{0}:{1}", connStringBuilder.DataSource, connStringBuilder.InitialCatalog);
+            connStringBuilder.ApplicationName = "Distributed Lock Provider"; //so we will get our own pool in the process
+            connStringBuilder.MaxPoolSize = Math.Max(connStringBuilder.MaxPoolSize, 250); //we hold connections while a lock is held, so we chew up connections
+            _connectionString = connStringBuilder.ToString();
         }
 
         /// <inheritdoc />
@@ -66,9 +69,13 @@ namespace Gibraltar.DistributedLocking
 
                 sqlLock.SafeDispose();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+#if DEBUG
+                Trace.TraceError("Unable to get lock due to {0}\r\n{1}", ex.GetBaseException().GetType(), ex.GetBaseException().Message);
+#endif
                 sqlLock.SafeDispose();
+                GC.KeepAlive(ex);
             }
 
             return null;
@@ -90,9 +97,13 @@ namespace Gibraltar.DistributedLocking
 
                 sqlLock.SafeDispose();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+#if DEBUG
+                Trace.TraceError("Unable to get lock request due to {0}\r\n{1}", ex.GetBaseException().GetType(), ex.GetBaseException().Message);
+#endif
                 sqlLock.SafeDispose();
+                GC.KeepAlive(ex);
             }
 
             return null;
@@ -111,15 +122,20 @@ namespace Gibraltar.DistributedLocking
                     //if there are no other threads trying to request a lock then we'll get an exclusive
                     //lock on it. Otherwise we won't :)
                     var result = sqlLock.PeekApplicationLock(requestLockName, SqlLockMode.Exclusive);
-                    if (result < 0)
+                    if (result < 1)
                     {
                         lockRequestPending = true;
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     //we don't care why we failed, we presume that means there is no pending request.
-                    
+#if DEBUG
+                    Trace.TraceError("Unable to check lock request due to {0}\r\n{1}", ex.GetBaseException().GetType(), ex.GetBaseException().Message);
+#endif
+                    sqlLock.SafeDispose();
+                    GC.KeepAlive(ex);
+
                 }
             }
 
