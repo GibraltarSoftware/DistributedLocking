@@ -54,7 +54,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\src\DistributedLocking\DistributedLocking.csproj">
+    <ProjectReference Include="..\DistributedLocking\DistributedLocking.csproj">
       <Project>{debc0303-9943-4bcc-9b01-29a0ba10764b}</Project>
       <Name>DistributedLocking</Name>
     </ProjectReference>

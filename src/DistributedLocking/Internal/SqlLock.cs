@@ -81,9 +81,9 @@ namespace Gibraltar.DistributedLocking.Internal
                 _queryTimeout = Math.Max(lockSeconds, _queryTimeout);
             }
 
-            using (var command = CreateCommand("sp_GetAppLock", GetConnection(), CommandType.StoredProcedure, true))
+            using (var command = CreateCommand("sys.sp_GetAppLock", GetConnection(), CommandType.StoredProcedure, true))
             {
-                SqlTransaction transaction = _transaction;
+                var transaction = _transaction;
                 if (transaction == null)
                 {
                     if (command.Connection.State != ConnectionState.Open)

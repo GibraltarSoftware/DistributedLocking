@@ -24,11 +24,31 @@ namespace Gibraltar.DistributedLocking.Test.Console
 
             var rng = new RNGCryptoServiceProvider();
 
-            var lockingClient = new LockingClient(lockManager, rng, new TimeSpan(0,0,10), new TimeSpan(0,2,00), "Session~d9a84ccf-9bef-4777-b202-a4343d35089a", 250);
+            int tasks = 100;
+            bool highContention = true;
+
+            TimeSpan maxLockDuration;
+            TimeSpan lockTimeout;
+            int maxLockNumber;
+
+            if (highContention)
+            {
+                maxLockDuration = new TimeSpan(0, 0, 0, 0, 50);
+                lockTimeout = new TimeSpan(0, 1, 0);
+                maxLockNumber = 5;
+            }
+            else
+            {
+                maxLockDuration = new TimeSpan(0, 0, 10);
+                lockTimeout = new TimeSpan(0, 2, 00);
+                maxLockNumber = 250;
+            }
+
+            var lockingClient = new LockingClient(lockManager, rng, maxLockDuration, lockTimeout, "Session~d9a84ccf-9bef-4777-b202-a4343d35089a", maxLockNumber);
 
             try
             {
-                lockingClient.Start(100);
+                lockingClient.Start(tasks);
                 System.Console.WriteLine("Running Lock Test, press any key to exit");
                 System.Console.ReadKey(true);
 

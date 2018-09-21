@@ -93,36 +93,43 @@ namespace Gibraltar.DistributedLocking
 
             // Lookup or create the proxy for the requested lock.
             DistributedLockProxy lockProxy;
-            lock (_lock)
+            lock(_lock)
             {
-                if (_proxies.TryGetValue(candidateLock.Name, out lockProxy) == false)
+                try
                 {
-                    // Didn't exist, need to make one.
-                    lockProxy = new DistributedLockProxy(_provider, name);
+                    if (_proxies.TryGetValue(candidateLock.Name, out lockProxy) == false)
+                    {
+                        // Didn't exist, need to make one.
+                        lockProxy = new DistributedLockProxy(_provider, name);
 
-                    lockProxy.Disposed += LockProxy_Disposed;
-                    _proxies.Add(lockProxy.Name, lockProxy);
+                        lockProxy.Disposed += LockProxy_Disposed;
+                        _proxies.Add(lockProxy.Name, lockProxy);
+                    }
+
+                    // Does the current thread already hold the lock?  (If it was still waiting on it, we couldn't get here.)
+                    Thread currentTurnThread = lockProxy.CheckCurrentTurnThread(candidateLock);
+                    if (Thread.CurrentThread == currentTurnThread && candidateLock.ActualLock != null)
+                    {
+                        Debug.Write(string.Format("Existing Lock Already Acquired: {0}-{1}", Name, name));
+                        grantedLock = candidateLock; // It's a secondary lock, so we don't need to queue it or wait.
+                        return true;
+                    }
+
+                    // Or is the lock currently held by another thread that we don't want to wait for?
+                    if (currentTurnThread != null && candidateLock.WaitForLock == false)
+                    {
+                        Debug.Write(string.Format("Unable to Acquire Lock (can't wait): {0}-{1}", Name, name));
+
+                        candidateLock.Dispose(); // We don't want to wait for it, so don't bother queuing an expired request.
+                        return false; // Just fail out.
+                    }
+
+                    lockProxy.QueueRequest(candidateLock); // Otherwise, queue the request inside the lock to keep the proxy around.
                 }
-
-                // Does the current thread already hold the lock?  (If it was still waiting on it, we couldn't get here.)
-                Thread currentTurnThread = lockProxy.CheckCurrentTurnThread(candidateLock);
-                if (Thread.CurrentThread == currentTurnThread && candidateLock.ActualLock != null)
+                finally
                 {
-                    Debug.Write(string.Format("Existing Lock Already Acquired: {0}-{1}", Name, name));
-                    grantedLock = candidateLock; // It's a secondary lock, so we don't need to queue it or wait.
-                    return true;
+                    Monitor.Pulse(_lock); //to get whoever's waiting a kick in the pants.
                 }
-
-                // Or is the lock currently held by another thread that we don't want to wait for?
-                if (currentTurnThread != null && candidateLock.WaitForLock == false)
-                {
-                    Debug.Write(string.Format("Unable to Acquire Lock (can't wait): {0}-{1}", Name, name));
-
-                    candidateLock.Dispose(); // We don't want to wait for it, so don't bother queuing an expired request.
-                    return false; // Just fail out.
-                }
-
-                lockProxy.QueueRequest(candidateLock); // Otherwise, queue the request inside the lock to keep the proxy around.
             }
 
             // Now we have the proxy and our request is queued.  Make sure some thread is trying to get the file lock.
@@ -141,7 +148,7 @@ namespace Gibraltar.DistributedLocking
                 }
             }
 
-            Debug.Write(string.Format(candidateLock == null ? "Lock Acquired: {0}-{1}" : "Unable to Acquire Lock: {0}-{1}", Name, name));
+            Debug.Write(string.Format(candidateLock == null ? "Unable to Acquire Lock: {0}-{1}" : "Lock Acquired: {0}-{1}", Name, name));
             grantedLock = candidateLock;
             return (grantedLock != null);
         }

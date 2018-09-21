@@ -49,7 +49,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
 
             for (var index = 0; index < _clientTasks.Length; index++)
             {
-                _clientTasks[index] = Task.Run(() => GenerateLocks(_cancellationTokenSource), _cancellationTokenSource.Token);
+                _clientTasks[index] = Task.Run(() => GenerateLocks( _cancellationTokenSource), _cancellationTokenSource.Token);
             }
         }
 
@@ -86,14 +86,14 @@ namespace Gibraltar.DistributedLocking.Test.Console
             }
         }
 
-        private void GenerateLocks(CancellationTokenSource cancellationTokenSource)
+        private void GenerateLocks( CancellationTokenSource cancellationTokenSource)
         {
             try
             {
                 while (cancellationTokenSource.IsCancellationRequested == false)
                 {
                     var lockTimespan = new TimeSpan(GetRandomNumber(0, (int)_maxLockDuration.Ticks));
-                    var nameIndex = GetRandomNumber(1, _maxLockNumber);
+                    var nameIndex = GetRandomNumber(1, _maxLockNumber).ToString();
                     var name = _lockPrefix + "-" + nameIndex;
                     try
                     {
@@ -112,15 +112,19 @@ namespace Gibraltar.DistributedLocking.Test.Console
                     }
                     catch (Exception ex)
                     {
+                        System.Console.ForegroundColor = ConsoleColor.Red;
                         System.Console.WriteLine("{3} Thread {1} - Unable to acquire lock {0} due to {2}", 
                             name, Thread.CurrentThread.ManagedThreadId, ex.GetBaseException().GetType(), DateTime.Now);
+                        System.Console.ForegroundColor = ConsoleColor.White;
                     }
                 }
             }
             catch (Exception ex)
             {
+                System.Console.ForegroundColor = ConsoleColor.Red;
                 System.Console.WriteLine("{3} Thread {1} - Locking task failed due to {0}:\r\n{2}", 
                     ex.GetBaseException().GetType(), Thread.CurrentThread.ManagedThreadId, ex.StackTrace, DateTime.Now);
+                System.Console.ForegroundColor = ConsoleColor.White;
             }
         }
     }

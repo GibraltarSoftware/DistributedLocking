@@ -18,6 +18,7 @@
 #endregion
 
 using System;
+using System.Diagnostics;
 
 namespace Gibraltar.DistributedLocking
 {
@@ -53,6 +54,9 @@ namespace Gibraltar.DistributedLocking
             ProviderName = providerName;
             LockName = lockName;
             TimeoutSeconds = timeoutSeconds;
+
+            if (Debugger.IsAttached)
+                Debugger.Break();
         }
 
         /// <summary>

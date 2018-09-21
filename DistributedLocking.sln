@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2036
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DistributedLocking", "src\DistributedLocking\DistributedLocking.csproj", "{DEBC0303-9943-4BCC-9B01-29A0BA10764B}"
 EndProject
@@ -13,7 +13,12 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Dependencies", "Dependencie
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DistributedLocking.Test.Console", "src\DistributedLocking.Test.Console\DistributedLocking.Test.Console.csproj", "{E61D7A31-B64E-4245-B6EC-17A9C2BCF7EB}"
+EndProject
 Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
@@ -27,8 +32,15 @@ Global
 		{77E63633-72DB-4F1F-B0C7-8CFE303960E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{77E63633-72DB-4F1F-B0C7-8CFE303960E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{77E63633-72DB-4F1F-B0C7-8CFE303960E3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E61D7A31-B64E-4245-B6EC-17A9C2BCF7EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E61D7A31-B64E-4245-B6EC-17A9C2BCF7EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E61D7A31-B64E-4245-B6EC-17A9C2BCF7EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E61D7A31-B64E-4245-B6EC-17A9C2BCF7EB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {13649191-B58F-4529-85CE-E508A4793E9C}
 	EndGlobalSection
 EndGlobal
