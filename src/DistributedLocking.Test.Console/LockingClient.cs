@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,6 +21,8 @@ namespace Gibraltar.DistributedLocking.Test.Console
         private CancellationTokenSource _cancellationTokenSource;
         private Task[] _clientTasks;
 
+        private ConsoleColor _defaultForeground;
+
         public LockingClient(DistributedLockManager lockManager, RandomNumberGenerator rng, TimeSpan maxLockDuration, TimeSpan lockTimeout, string lockPrefix, int maxLockNumber)
         {
             _lockManager = lockManager;
@@ -32,6 +31,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
             _lockTimeout = lockTimeout;
             _lockPrefix = lockPrefix;
             _maxLockNumber = maxLockNumber;
+            _defaultForeground = System.Console.ForegroundColor;
         }
 
         /// <summary>
@@ -49,7 +49,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
 
             for (var index = 0; index < _clientTasks.Length; index++)
             {
-                _clientTasks[index] = Task.Run(() => GenerateLocks( _cancellationTokenSource), _cancellationTokenSource.Token);
+                _clientTasks[index] = Task.Factory.StartNew(() => GenerateLocks( _cancellationTokenSource), TaskCreationOptions.LongRunning);
             }
         }
 
@@ -105,7 +105,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
                             System.Console.WriteLine("{4} Thread {1} - Acquired lock {0} in {2:N0}ms, will hold for {3:N0}ms", 
                                 newLock.Name, Thread.CurrentThread.ManagedThreadId, stopwatch.ElapsedMilliseconds, lockTimespan.TotalMilliseconds, DateTime.Now);
 
-                            Task.Delay(lockTimespan, cancellationTokenSource.Token).Wait();
+                            Task.Delay(lockTimespan, cancellationTokenSource.Token).Wait(cancellationTokenSource.Token);
 
                             System.Console.WriteLine("{2} Thread {1} - Releasing lock {0}", newLock.Name, Thread.CurrentThread.ManagedThreadId, DateTime.Now);
                         }
@@ -115,7 +115,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
                         System.Console.ForegroundColor = ConsoleColor.Red;
                         System.Console.WriteLine("{3} Thread {1} - Unable to acquire lock {0} due to {2}", 
                             name, Thread.CurrentThread.ManagedThreadId, ex.GetBaseException().GetType(), DateTime.Now);
-                        System.Console.ForegroundColor = ConsoleColor.White;
+                        System.Console.ForegroundColor = _defaultForeground;
                     }
                 }
             }
@@ -124,7 +124,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
                 System.Console.ForegroundColor = ConsoleColor.Red;
                 System.Console.WriteLine("{3} Thread {1} - Locking task failed due to {0}:\r\n{2}", 
                     ex.GetBaseException().GetType(), Thread.CurrentThread.ManagedThreadId, ex.StackTrace, DateTime.Now);
-                System.Console.ForegroundColor = ConsoleColor.White;
+                System.Console.ForegroundColor = _defaultForeground;
             }
         }
     }
