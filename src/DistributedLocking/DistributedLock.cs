@@ -206,21 +206,26 @@ namespace Gibraltar.DistributedLocking
         {
             lock(_myLock)
             {
-                if (actualLock != null && actualLock.IsDisposed == false && actualLock.OwningThread == _owningThread &&
-                    string.Equals(actualLock.Name, Name, StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    // We don't need to lock around this because we're bypassing the proxy's queue and staying only on our own thread.
-                    _actualLock = actualLock;
-                    _waitTimeout = DateTimeOffset.MaxValue; // We have a lock (sort of), so reset our timeout to forever.
+                    if (actualLock != null && actualLock.IsDisposed == false && actualLock.OwningThread == _owningThread &&
+                        string.Equals(actualLock.Name, Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // We don't need to lock around this because we're bypassing the proxy's queue and staying only on our own thread.
+                        _actualLock = actualLock;
+                        _waitTimeout = DateTimeOffset.MaxValue; // We have a lock (sort of), so reset our timeout to forever.
+                    }
+                    else
+                    {
+                        // It's an invalid call, so make sure our setting is cleared out.
+                        _actualLock = null;
+                        throw new InvalidOperationException("Can't set a secondary lock from an invalid actual lock.");
+                    }
                 }
-                else
+                finally
                 {
-                    // It's an invalid call, so make sure our setting is cleared out.
-                    _actualLock = null;
-                    throw new InvalidOperationException("Can't set a secondary lock from an invalid actual lock.");
+                    Monitor.PulseAll(_myLock);
                 }
-
-                Monitor.PulseAll(_myLock);
             }
         }
 
@@ -238,30 +243,33 @@ namespace Gibraltar.DistributedLocking
         {
             lock (_myLock)
             {
-                if (_waitForLock) // Never changes, so check it first.
+                try
                 {
-                    while (_myTurn == false && _disposed == false) // Either flag and we're done waiting.
+                    if (_waitForLock) // Never changes, so check it first.
                     {
-                        var howLong = _waitTimeout - DateTimeOffset.Now;
-                        if (howLong.TotalMilliseconds <= 0)
+                        while (_myTurn == false && _disposed == false) // Either flag and we're done waiting.
                         {
-                            _waitTimeout = DateTimeOffset.MinValue; // Mark timeout as expired.
-                            return false; // Our time is up!
+                            var howLong = _waitTimeout - DateTimeOffset.Now;
+                            if (howLong.TotalMilliseconds <= 0)
+                            {
+                                _waitTimeout = DateTimeOffset.MinValue; // Mark timeout as expired.
+                                return false; // Our time is up!
+                            }
+
+                            Monitor.Wait(_myLock, howLong);
                         }
-
-                        // We don't need to do a pulse here, we're the only ones waiting, and we didn't change any state.
-                        Monitor.Wait(_myLock, howLong);
                     }
+
+                    // Now we've done any allowed waiting as needed, check what our status is.
+                    if (_disposed || _myTurn == false)
+                        return false; // We're expired!
+                    else
+                        return true; // Otherwise, we're not disposed and it's our turn!
                 }
-
-                // Now we've done any allowed waiting as needed, check what our status is.
-
-                if (_disposed || _myTurn == false)
-                    return false; // We're expired!
-                else
-                    return true; // Otherwise, we're not disposed and it's our turn!
-
-                // We don't need to do a pulse here, we're the only ones waiting, and we didn't change any state.
+                finally
+                {
+                    Monitor.PulseAll(_myLock);
+                }
             }
         }
 

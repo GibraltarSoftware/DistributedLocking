@@ -18,6 +18,7 @@
 #endregion
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
@@ -34,7 +35,7 @@ namespace Gibraltar.DistributedLocking
     {
         private readonly IDistributedLockProvider _provider;
         private readonly object _lock = new object();
-        private readonly Dictionary<string, DistributedLockProxy> _proxies = new Dictionary<string, DistributedLockProxy>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, DistributedLockProxy> _proxies = new ConcurrentDictionary<string, DistributedLockProxy>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Create a new distributed lock manager, denoting a scope of locks.
@@ -92,22 +93,20 @@ namespace Gibraltar.DistributedLocking
             var candidateLock = new DistributedLock(requester, name, timeoutSeconds);
 
             // Lookup or create the proxy for the requested lock.
-            DistributedLockProxy lockProxy;
-            lock(_lock)
+            var lockProxy =_proxies.GetOrAdd(candidateLock.Name, (key) =>
+                                                  {
+                                                      var newProxy = new DistributedLockProxy(_provider, key);
+
+                                                      newProxy.Disposed += LockProxy_Disposed;
+                                                      return newProxy;
+                                                  });
+
+            lock (lockProxy)
             {
                 try
                 {
-                    if (_proxies.TryGetValue(candidateLock.Name, out lockProxy) == false)
-                    {
-                        // Didn't exist, need to make one.
-                        lockProxy = new DistributedLockProxy(_provider, name);
-
-                        lockProxy.Disposed += LockProxy_Disposed;
-                        _proxies.Add(lockProxy.Name, lockProxy);
-                    }
-
                     // Does the current thread already hold the lock?  (If it was still waiting on it, we couldn't get here.)
-                    Thread currentTurnThread = lockProxy.CheckCurrentTurnThread(candidateLock);
+                    var currentTurnThread = lockProxy.CheckCurrentTurnThread(candidateLock);
                     if (Thread.CurrentThread == currentTurnThread && candidateLock.ActualLock != null)
                     {
                         Debug.Write(string.Format("Existing Lock Already Acquired: {0}-{1}", Name, name));
@@ -128,7 +127,7 @@ namespace Gibraltar.DistributedLocking
                 }
                 finally
                 {
-                    Monitor.Pulse(_lock); //to get whoever's waiting a kick in the pants.
+                    Monitor.Pulse(lockProxy); //to get whoever's waiting a kick in the pants.
                 }
             }
 
@@ -157,19 +156,25 @@ namespace Gibraltar.DistributedLocking
 
         private void LockProxy_Disposed(object sender, EventArgs e)
         {
-            DistributedLockProxy disposingProxy = (DistributedLockProxy)sender;
+            var disposingProxy = (DistributedLockProxy)sender;
 
-            lock (_lock)
+            var lockKey = disposingProxy.Name;
+
+            // Only remove the proxy if the one we're disposing is the one in our collection for that key.
+            DistributedLockProxy actualProxy;
+            if (_proxies.TryRemove(lockKey, out actualProxy) && ReferenceEquals(actualProxy, disposingProxy) == false)
             {
-                string lockKey = disposingProxy.Name;
-                DistributedLockProxy actualProxy;
-                // Only remove the proxy if the one we're disposing is the one in our collection for that key.
-                if (_proxies.TryGetValue(lockKey, out actualProxy) && ReferenceEquals(actualProxy, disposingProxy))
-                {
-                    _proxies.Remove(lockKey);
-                }
+                //ruh roh; it wasn't us - we need to put that back in.
+                DistributedLockProxy errantProxy = null;
+                Debug.Write(string.Format("Lock proxy for lock {0} is not our object, re-inserting", lockKey));
+                _proxies.AddOrUpdate(lockKey, actualProxy, (key, proxy) =>
+                                                           {
+                                                               errantProxy = proxy;
+                                                               return actualProxy;
+                                                           });
 
-                Monitor.PulseAll(_lock);
+                //we really should merge proxies..
+                errantProxy.Dispose();
             }
         }
 
