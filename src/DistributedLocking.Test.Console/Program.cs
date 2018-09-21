@@ -25,7 +25,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
             var rng = new RNGCryptoServiceProvider();
 
             int tasks = 100;
-            bool highContention = true;
+            bool highContention = false;
 
             TimeSpan maxLockDuration;
             TimeSpan lockTimeout;
