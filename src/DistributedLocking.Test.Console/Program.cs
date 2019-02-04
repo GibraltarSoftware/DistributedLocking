@@ -35,13 +35,13 @@ namespace Gibraltar.DistributedLocking.Test.Console
             {
                 maxLockDuration = new TimeSpan(0, 0, 0, 0, 50);
                 lockTimeout = new TimeSpan(0, 1, 0);
-                maxLockNumber = 5;
+                maxLockNumber = tasks / 2;
             }
             else
             {
-                maxLockDuration = new TimeSpan(0, 0, 10);
+                maxLockDuration = new TimeSpan(0, 0, 0, 0, 50);
                 lockTimeout = new TimeSpan(0, 2, 00);
-                maxLockNumber = 250;
+                maxLockNumber = tasks * 5;
             }
 
             var lockingClient = new LockingClient(lockManager, rng, maxLockDuration, lockTimeout, "Session~d9a84ccf-9bef-4777-b202-a4343d35089a", maxLockNumber);

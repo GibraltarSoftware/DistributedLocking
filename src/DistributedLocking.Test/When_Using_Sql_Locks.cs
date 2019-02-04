@@ -57,7 +57,7 @@ namespace Gibraltar.DistributedLocking.Test
         }
 
         [Test]
-        public void Can_Not_Aquire_Same_Lock_On_Another_Thread()
+        public void Can_Not_Acquire_Same_Lock_On_Another_Thread()
         {
             var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 

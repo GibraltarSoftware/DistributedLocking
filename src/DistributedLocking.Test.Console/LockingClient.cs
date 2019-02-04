@@ -102,12 +102,17 @@ namespace Gibraltar.DistributedLocking.Test.Console
                         {
                             stopwatch.Stop();
 
+#if DEBUG
                             System.Console.WriteLine("{4} Thread {1} - Acquired lock {0} in {2:N0}ms, will hold for {3:N0}ms", 
                                 newLock.Name, Thread.CurrentThread.ManagedThreadId, stopwatch.ElapsedMilliseconds, lockTimespan.TotalMilliseconds, DateTime.Now);
+#endif
 
-                            Task.Delay(lockTimespan, cancellationTokenSource.Token).Wait(cancellationTokenSource.Token);
+                            Thread.Sleep(lockTimespan);
 
+                            //Task.Delay(lockTimespan, cancellationTokenSource.Token).Wait(cancellationTokenSource.Token);
+#if DEBUG
                             System.Console.WriteLine("{2} Thread {1} - Releasing lock {0}", newLock.Name, Thread.CurrentThread.ManagedThreadId, DateTime.Now);
+#endif
                         }
                     }
                     catch (Exception ex)

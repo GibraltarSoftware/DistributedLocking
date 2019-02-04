@@ -18,6 +18,7 @@
 #endregion
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -33,14 +34,14 @@ namespace Gibraltar.DistributedLocking.Internal
         private const int LockPollingDelay = 16; // 16 ms wait between attempts to open a lock file.
         private const int BackOffDelay = LockPollingDelay * 3; // 48 ms wait when another process requests a turn.
 
-        private readonly Queue<DistributedLock> _waitQueue = new Queue<DistributedLock>(); //PROTECTED BY LOCK
-        private readonly object _queueLock = new object();
+        private readonly ConcurrentQueue<DistributedLock> _waitQueue = new ConcurrentQueue<DistributedLock>();
+        private readonly object _currentLockLock = new object(); 
         private readonly IDistributedLockProvider _provider;
         private readonly string _name;
 
-        private DistributedLock _currentLockTurn;
-        private IDisposable _lock;
-        private IDisposable _lockRequest;
+        private DistributedLock _currentLockTurn; //protected by curentLockLock
+        private IDisposable _lock;//protected by curentLockLock
+        private IDisposable _lockRequest;//protected by curentLockLock
         private DateTimeOffset _minTimeNextTurn = DateTimeOffset.MinValue;
         private bool _disposed;
 
@@ -91,35 +92,6 @@ namespace Gibraltar.DistributedLocking.Internal
         #region Internal Properties and Methods
 
         /// <summary>
-        /// The lock request with the current turn to hold or wait for the lock.
-        /// </summary>
-        internal DistributedLock CurrentLockTurn => _currentLockTurn;
-
-        /// <summary>
-        /// The requesting owner of the current turn for the lock.
-        /// </summary>
-        internal object CurrentTurnOwner => _currentLockTurn == null ? null : _currentLockTurn.Owner;
-
-        /// <summary>
-        /// The thread with the current turn for the lock.
-        /// </summary>
-        internal Thread CurrentTurnThread => _currentLockTurn == null ? null : _currentLockTurn.OwningThread;
-
-        /// <summary>
-        /// The ManagedThreadId of the thread with the current turn for the lock, or -1 if none.  (For debug convenience only.)
-        /// </summary>
-        internal int CurrentTurnThreadId
-        {
-            get
-            {
-                if (_currentLockTurn == null)
-                    return -1; 
-
-                return _currentLockTurn.OwningThread.ManagedThreadId;
-            }
-        }
-
-        /// <summary>
         /// Object persistence policy for this instance:  Whether to dispose this instance when file lock is released.
         /// </summary>
         internal bool DisposeOnClose { get; set; }
@@ -134,7 +106,7 @@ namespace Gibraltar.DistributedLocking.Internal
             if (candidateLock != null && candidateLock.OwningThread != Thread.CurrentThread)
                 throw new InvalidOperationException("A lock request may only be waited on by the thread which created it.");
 
-            lock (_queueLock)
+            lock (_currentLockLock)
             {
                 if (_currentLockTurn != null)
                 {
@@ -165,10 +137,7 @@ namespace Gibraltar.DistributedLocking.Internal
             if (lockRequest.OwningThread != Thread.CurrentThread)
                 throw new InvalidOperationException("A lock request may only be queued by the thread which created it.");
 
-            lock (_queueLock)
-            {
-                _waitQueue.Enqueue(lockRequest);
-            }
+            _waitQueue.Enqueue(lockRequest);
         }
 
         /// <summary>
@@ -203,26 +172,29 @@ namespace Gibraltar.DistributedLocking.Internal
                     if (!CommonCentralLogic.SilentMode)
                     {
                         // Who actually has the lock right now?
-                        if (_currentLockTurn != null)
+                        lock(_currentLockLock)
                         {
-                            Thread currentOwningThread = _currentLockTurn.OwningThread;
-                            int currentOwningThreadId = -1;
-                            string currentOwningThreadName = "null";
-                            if (currentOwningThread != null) // To make sure we can't get a null-ref exception from logging this...
+                            if (_currentLockTurn != null)
                             {
-                                currentOwningThreadId = currentOwningThread.ManagedThreadId;
-                                currentOwningThreadName = currentOwningThread.Name ?? string.Empty;
-                            }
+                                Thread currentOwningThread = _currentLockTurn.OwningThread;
+                                int currentOwningThreadId = -1;
+                                string currentOwningThreadName = "null";
+                                if (currentOwningThread != null) // To make sure we can't get a null-ref exception from logging this...
+                                {
+                                    currentOwningThreadId = currentOwningThread.ManagedThreadId;
+                                    currentOwningThreadName = currentOwningThread.Name ?? string.Empty;
+                                }
 
-                            Trace.WriteLine(string.Format("{0}\r\nA lock request gave up because it is still being held by another thread.\r\n" +
-                                                          "Lock file: {1}\r\nCurrent holding thread: {2} ({3})",
-                                                          lockRequest.WaitForLock ? "Lock request timed out" : "Lock request couldn't wait",
-                                                          _name, currentOwningThreadId, currentOwningThreadName));
-                        }
-                        else
-                        {
-                            Trace.TraceError("Lock request turn error\r\nA lock request failed to get its turn but the current lock turn is null.  " +
-                                              "This probably should not happen.\r\nLock file: {0}\r\n", _name);
+                                Trace.WriteLine(string.Format("{0}\r\nA lock request gave up because it is still being held by another thread.\r\n" +
+                                                              "Lock file: {1}\r\nCurrent holding thread: {2} ({3})",
+                                    lockRequest.WaitForLock ? "Lock request timed out" : "Lock request couldn't wait",
+                                    _name, currentOwningThreadId, currentOwningThreadName));
+                            }
+                            else
+                            {
+                                Trace.TraceError("Lock request turn error\r\nA lock request failed to get its turn but the current lock turn is null.  " +
+                                                 "This probably should not happen.\r\nLock file: {0}\r\n", _name);
+                            }
                         }
                     }
 
@@ -234,7 +206,14 @@ namespace Gibraltar.DistributedLocking.Internal
             // Yay, now it's our turn!  Do we already hold the lock?
 
             bool validLock;
-            if (_lock != null)
+
+            IDisposable curLock;
+            lock(_currentLockLock)
+            {
+                curLock = _lock;
+            }
+
+            if (curLock != null)
                 validLock = true; // It's our request's turn and this proxy already holds the lock!
             else
                 validLock = TryGetLock(lockRequest); // Can we get the lock?
@@ -271,22 +250,27 @@ namespace Gibraltar.DistributedLocking.Internal
         /// <returns></returns>
         private bool TryGetLock(DistributedLock currentRequest)
         {
-            bool waitForLock = currentRequest.WaitForLock;
-            DateTimeOffset lockTimeout = currentRequest.WaitTimeout;
-            bool validLock = false;
+            var waitForLock = currentRequest.WaitForLock;
+            var lockTimeout = currentRequest.WaitTimeout;
+            var validLock = false;
 
             while (waitForLock == false || DateTimeOffset.Now < lockTimeout)
             {
                 if (DateTimeOffset.Now >= _minTimeNextTurn) // Make sure we aren't in a back-off delay.
                 {
-                    _lock = _provider.GetLock(_name); 
-                    if (_lock != null)
+                    var newLock = _provider.GetLock(_name);
+                    if (newLock != null)
                     {
-                        // We have the lock!  Close our lock request if we have one so later we can detect if anyone else does.
-                        if (_lockRequest != null)
+                        lock(_currentLockLock)
                         {
-                            _lockRequest.Dispose();
-                            _lockRequest = null;
+                            _lock = newLock;
+
+                            // We have the lock!  Close our lock request if we have one so later we can detect if anyone else does.
+                            if (_lockRequest != null)
+                            {
+                                _lockRequest.Dispose();
+                                _lockRequest = null;
+                            }
                         }
 
                         validLock = true; // Report that we have the lock now.
@@ -297,8 +281,11 @@ namespace Gibraltar.DistributedLocking.Internal
                 if (validLock == false && waitForLock)
                 {
                     // We didn't get the lock and we want to wait for it, so try to open a lock request.
-                    if (_lockRequest == null)
-                        _lockRequest = _provider.GetLockRequest(_name); // Tell the other process we'd like a turn.
+                    lock(_currentLockLock)
+                    {
+                        if (_lockRequest == null)
+                            _lockRequest = _provider.GetLockRequest(_name); // Tell the other process we'd like a turn.
+                    }
 
                     // Then we should allow some real time to pass before trying again because external locks aren't very fast.
                     Thread.Sleep(LockPollingDelay);
@@ -320,7 +307,7 @@ namespace Gibraltar.DistributedLocking.Internal
         /// <returns>True if the caller's supplied request is the next turn, false otherwise.</returns>
         private bool StartNextTurn(DistributedLock currentRequest)
         {
-            lock (_queueLock)
+            lock (_currentLockLock)
             {
                 int dequeueCount = DequeueNextRequest(); // Find the next turn if there isn't one already underway.
                 if (_currentLockTurn != null)
@@ -346,7 +333,7 @@ namespace Gibraltar.DistributedLocking.Internal
 
                     if (_lock != null)
                     {
-                        _lock.Dispose(); // Release the OS file lock.
+                        _lock.Dispose(); // Release the external lock.
                         _lock = null;
                     }
 
@@ -360,18 +347,17 @@ namespace Gibraltar.DistributedLocking.Internal
 
         private int DequeueNextRequest()
         {
-            lock (_queueLock)
+            lock (_currentLockLock)
             {
-                int dequeueCount = 0;
+                var dequeueCount = 0;
                 RuntimeHelpers.PrepareConstrainedRegions(); // Make sure we don't thread-abort in the middle of this logic.
                 try
                 {
                 }
                 finally
                 {
-                    while (_currentLockTurn == null && _waitQueue.Count > 0)
+                    while (_currentLockTurn == null && _waitQueue.TryDequeue(out _currentLockTurn) == true)
                     {
-                        _currentLockTurn = _waitQueue.Dequeue();
                         dequeueCount++;
 
                         if (_currentLockTurn.IsExpired)
@@ -404,20 +390,21 @@ namespace Gibraltar.DistributedLocking.Internal
                 // Free managed resources here (normal Dispose() stuff, which should itself call Dispose(true))
                 // Other objects may be referenced in this case
 
-                lock (_queueLock)
+                if (!_disposed)
                 {
-                    if (!_disposed)
+                    _disposed = true; // Make sure we don't do it more than once.
+
+                    // Empty our queue (although it should already be empty!).
+                    while (_waitQueue.IsEmpty == false)
                     {
-                        _disposed = true; // Make sure we don't do it more than once.
-
-                        // Empty our queue (although it should already be empty!).
-                        while (_waitQueue.Count > 0)
+                        if (_waitQueue.TryDequeue(out var lockInstance))
                         {
-                            DistributedLock lockInstance = _waitQueue.Dequeue();
-                            //lockInstance.Disposed -= Lock_Disposed; // Suppress the events, don't start new turns!
-                            lockInstance.Dispose(); // Tell any threads still waiting that their request has expired.
+                            lockInstance.SafeDispose();// Tell any threads still waiting that their request has expired.
                         }
+                    }
 
+                    lock(_currentLockLock)
+                    {
                         if (_currentLockTurn == null)
                         {
                             // No thread is currently prepared to do this, so clear them here.
@@ -433,30 +420,18 @@ namespace Gibraltar.DistributedLocking.Internal
                                 _lock = null;
                             }
                         }
-
-                        // We're not fully disposed until the current lock owner gets disposed so we can release the lock.
-                        // But fire the event to tell the RepositoryLockManager that we are no longer a valid proxy.
-                        OnDispose();
                     }
+
+                    // We're not fully disposed until the current lock owner gets disposed so we can release the lock.
+                    // But fire the event to tell the RepositoryLockManager that we are no longer a valid proxy.
+                    OnDispose();
                 }
             }
             else
             {
-                // Free native resources here (alloc's, etc)
-                // May be called from within the finalizer, so don't reference other objects here
-
-                // But we need to make sure the file opens get cleaned up, so we will anyway if we have to.... ???
-                if (_lockRequest != null)
-                {
-                    _lockRequest.Dispose();
-                    _lockRequest = null;
-                }
-
-                if (_lock != null)
-                {
-                    _lock.Dispose();
-                    _lock = null;
-                }
+                // Even in this case when we are in the finalizer We need to be sure we release any object handles we may still have.
+                _lockRequest = null;
+                _lock = null;
             }
         }
 
@@ -476,7 +451,7 @@ namespace Gibraltar.DistributedLocking.Internal
             disposingLock.Disposed -= Lock_Disposed; // Unsubscribe.
 
             //we need to remove this object from the lock collection
-            lock (_queueLock)
+            lock (_currentLockLock)
             {
                 // Only remove the lock if the one we're disposing is the original top-level lock for that key.
                 if (_currentLockTurn == null || ReferenceEquals(_currentLockTurn, disposingLock) == false)
