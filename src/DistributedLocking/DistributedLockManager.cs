@@ -34,7 +34,6 @@ namespace Gibraltar.DistributedLocking
     public class DistributedLockManager
     {
         private readonly IDistributedLockProvider _provider;
-        private readonly object _lock = new object();
         private readonly ConcurrentDictionary<string, DistributedLockProxy> _proxies = new ConcurrentDictionary<string, DistributedLockProxy>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
@@ -93,13 +92,13 @@ namespace Gibraltar.DistributedLocking
             var candidateLock = new DistributedLock(requester, name, timeoutSeconds);
 
             // Lookup or create the proxy for the requested lock.
-            var lockProxy =_proxies.GetOrAdd(candidateLock.Name, (key) =>
-                                                  {
-                                                      var newProxy = new DistributedLockProxy(_provider, key);
+            var lockProxy = _proxies.GetOrAdd(candidateLock.Name, (key) =>
+                                                   {
+                                                       var newProxy = new DistributedLockProxy(_provider, key);
 
-                                                      newProxy.Disposed += LockProxy_Disposed;
-                                                      return newProxy;
-                                                  });
+                                                       newProxy.Disposed += LockProxy_Disposed;
+                                                       return newProxy;
+                                                   });
 
             lock (lockProxy)
             {
@@ -162,19 +161,33 @@ namespace Gibraltar.DistributedLocking
 
             // Only remove the proxy if the one we're disposing is the one in our collection for that key.
             DistributedLockProxy actualProxy;
-            if (_proxies.TryRemove(lockKey, out actualProxy) && ReferenceEquals(actualProxy, disposingProxy) == false)
+            if (_proxies.TryRemove(lockKey, out actualProxy))
             {
-                //ruh roh; it wasn't us - we need to put that back in.
-                DistributedLockProxy errantProxy = null;
-                Debug.Write(string.Format("Lock proxy for lock {0} is not our object, re-inserting", lockKey));
-                _proxies.AddOrUpdate(lockKey, actualProxy, (key, proxy) =>
-                                                           {
-                                                               errantProxy = proxy;
-                                                               return actualProxy;
-                                                           });
+                if (ReferenceEquals(actualProxy, disposingProxy))
+                {
+                    //good, the object we got is us so we are the one true proxy.
+                    disposingProxy.Disposed -= LockProxy_Disposed;
+                }
+                else
+                {
+                    //ruh roh; it wasn't us - we need to put that back in.
+                    DistributedLockProxy errantProxy = null;
+                    Debug.Write(string.Format("Lock proxy for lock {0} is not our object, re-inserting", lockKey));
+                    _proxies.AddOrUpdate(lockKey, actualProxy, (key, proxy) =>
+                                                               {
+                                                                   errantProxy = proxy;
+                                                                   return actualProxy;
+                                                               });
 
-                //we really should merge proxies..
-                errantProxy.Dispose();
+                    //we really should merge proxies..
+                    errantProxy.Dispose();
+                }
+            }
+            else
+            {
+                //we're somehow a dangling proxy; still release our delegate reference so we don't leak.
+                Debug.Write(string.Format("Lock proxy for lock {0} was not in the proxies dictionary.", lockKey));
+                disposingProxy.Disposed -= LockProxy_Disposed;
             }
         }
 

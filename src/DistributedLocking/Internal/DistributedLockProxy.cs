@@ -26,7 +26,7 @@ using System.Threading;
 namespace Gibraltar.DistributedLocking.Internal
 {
     /// <summary>
-    /// A class to hold a file lock for this process (app domain) and pass it fairly to other waiting threads before release.
+    /// A class to hold a lock for this process (app domain) and pass it fairly to other waiting threads before release.
     /// </summary>
     internal class DistributedLockProxy
     {
@@ -300,7 +300,7 @@ namespace Gibraltar.DistributedLocking.Internal
                     if (_lockRequest == null)
                         _lockRequest = _provider.GetLockRequest(_name); // Tell the other process we'd like a turn.
 
-                    // Then we should allow some real time to pass before trying again because file opens aren't very fast.
+                    // Then we should allow some real time to pass before trying again because external locks aren't very fast.
                     Thread.Sleep(LockPollingDelay);
                 }
                 else

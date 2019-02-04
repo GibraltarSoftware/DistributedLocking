@@ -131,8 +131,22 @@ namespace Gibraltar.DistributedLocking.Internal
         {
             if (disposing)
             {
-                _transaction.SafeDispose();
-                _transaction = null;
+                if (_transaction != null)
+                {
+                    try
+                    {
+                        _transaction.Commit(); //commit is faster than rollback, so we try..
+                    }
+                    catch (Exception ex)
+                    {
+                        GC.KeepAlive(ex);
+                    }
+                    finally
+                    {
+                        _transaction.SafeDispose();
+                        _transaction = null;
+                    }
+                }
 
                 _connection.SafeDispose();
                 _connection = null;
