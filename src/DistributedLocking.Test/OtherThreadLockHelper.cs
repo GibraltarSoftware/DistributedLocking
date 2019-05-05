@@ -68,10 +68,10 @@ namespace Gibraltar.DistributedLocking.Test
             {
                 helperThread.Start();
 
-                System.Threading.Monitor.PulseAll(m_Lock);
+                Monitor.PulseAll(m_Lock);
                 while (m_RepositoryLock == null && m_Exited == false)
                 {
-                    System.Threading.Monitor.Wait(m_Lock);
+                    Monitor.Wait(m_Lock);
                 }
 
                 if (m_RepositoryLock != null)
@@ -83,17 +83,19 @@ namespace Gibraltar.DistributedLocking.Test
 
         private void HelperThreadStart()
         {
+            DistributedLockManager.LockBarrier();
+
             lock (m_Lock)
             {
                 m_LockManager.TryLock(this, m_Name, m_Timeout, out m_RepositoryLock);
 
                 if (m_RepositoryLock != null)
                 {
-                    System.Threading.Monitor.PulseAll(m_Lock);
+                    Monitor.PulseAll(m_Lock);
 
                     while (m_Exiting == false)
                     {
-                        System.Threading.Monitor.Wait(m_Lock); // Thread waits until we're told to exit.
+                        Monitor.Wait(m_Lock); // Thread waits until we're told to exit.
                     }
 
                     m_RepositoryLock.Dispose(); // We're exiting, so it's time to release the lock!
@@ -102,7 +104,7 @@ namespace Gibraltar.DistributedLocking.Test
                 // Otherwise, we couldn't get the lock.
 
                 m_Exited = true; // Lock is released and thread is exiting.
-                System.Threading.Monitor.PulseAll(m_Lock);
+                Monitor.PulseAll(m_Lock);
             }
         }
 

@@ -19,6 +19,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using NUnit.Framework;
 
 namespace Gibraltar.DistributedLocking.Test
@@ -200,9 +201,50 @@ namespace Gibraltar.DistributedLocking.Test
             }
         }
 
+        [Test]
+        public async Task Can_Acquire_Lock_Many_Times_Async()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            var lockIterations = 1000;
+
+            for (var curIteration = 0; curIteration < lockIterations; curIteration++)
+            {
+                try
+                {
+                    var outerLock = lockManager.Lock(this, MultiprocessLockName, 0);
+
+                    try
+                    {
+                        Assert.IsNotNull(outerLock, "Unable to acquire lock on iteration {0:N0}", curIteration);
+
+                        //now we need to do something else async so we resume back.
+                        await GratuitousWorkAsync(outerLock).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        outerLock.Dispose();
+                    }
+                }
+                catch (LockTimeoutException ex)
+                {
+                    throw new Exception("Unable to acquire the lock immediately on iteration " + curIteration, ex);
+                }
+            }
+        }
+
+        private async Task GratuitousWorkAsync(DistributedLock distributedLock)
+        {
+            Assert.That(distributedLock.IsDisposed == false);
+
+            await Task.Delay(10).ConfigureAwait(false);
+            await Task.Delay(10).ConfigureAwait(false);
+            await Task.Delay(10).ConfigureAwait(false);
+        }
+
         private SqlLockProvider GetLockProvider(string databaseName)
         {
-            var connectionString = string.Format(ConnectionStringTemplate, ".", databaseName);
+            var connectionString = string.Format(ConnectionStringTemplate, "192.168.1.73", databaseName);
 
             return new SqlLockProvider(connectionString);
         }

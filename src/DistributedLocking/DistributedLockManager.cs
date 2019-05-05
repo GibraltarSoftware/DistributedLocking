@@ -21,6 +21,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.Remoting.Messaging;
 using System.Threading;
 using Gibraltar.DistributedLocking.Internal;
 
@@ -33,6 +34,8 @@ namespace Gibraltar.DistributedLocking
     /// by locking a file on disk.  Designed for use with the Using statement as opposed to the Lock statement.</remarks>
     public class DistributedLockManager
     {
+        private const string ContextLockName = "Distributed_Lock_Id";
+
         private readonly IDistributedLockProvider _provider;
         private readonly ConcurrentDictionary<string, DistributedLockProxy> _proxies = new ConcurrentDictionary<string, DistributedLockProxy>(StringComparer.OrdinalIgnoreCase);
 
@@ -60,8 +63,7 @@ namespace Gibraltar.DistributedLocking
         /// <exception cref="LockTimeoutException">Thrown if the lock can not be acquired within the timeout specified</exception>
         public DistributedLock Lock(object requester, string name, int timeoutSeconds)
         {
-            DistributedLock grantedLock;
-            if (TryLock(requester, name, timeoutSeconds, out grantedLock))
+            if (TryLock(requester, name, timeoutSeconds, out var grantedLock))
             {
                 return grantedLock;
             }
@@ -69,6 +71,33 @@ namespace Gibraltar.DistributedLocking
             var message = (timeoutSeconds > 0) ? string.Format("Unable to acquire lock {0} within {1} seconds", name, timeoutSeconds)
                                  : string.Format("Unable to acquire lock {0} immediately", name);
             throw new LockTimeoutException(Name, name, timeoutSeconds, message);
+        }
+
+        /// <summary>
+        /// The unique Id for the current execution context
+        /// </summary>
+        public static Guid CurrentLockId
+        {
+            get
+            {
+                var contextId = CallContext.LogicalGetData(ContextLockName) as Guid?;
+
+                if (contextId == null)
+                {
+                    contextId = Guid.NewGuid();
+                    CallContext.LogicalSetData(ContextLockName, contextId);
+                }
+
+                return contextId.Value;
+            }
+        }
+
+        /// <summary>
+        /// Called after starting a new async operation to prevent locks from inheriting to it.
+        /// </summary>
+        public static void LockBarrier()
+        {
+            CallContext.LogicalSetData(ContextLockName, Guid.NewGuid());
         }
 
         /// <summary>
@@ -105,8 +134,9 @@ namespace Gibraltar.DistributedLocking
                 try
                 {
                     // Does the current thread already hold the lock?  (If it was still waiting on it, we couldn't get here.)
-                    var currentTurnThread = lockProxy.CheckCurrentTurnThread(candidateLock);
-                    if (Thread.CurrentThread == currentTurnThread && candidateLock.ActualLock != null)
+                    var currentTurnLockId = lockProxy.CheckCurrentTurnThread(candidateLock);
+
+                    if (currentTurnLockId != null && DistributedLockManager.CurrentLockId == currentTurnLockId && candidateLock.ActualLock != null)
                     {
                         Debug.Write(string.Format("Existing Lock Already Acquired: {0}-{1}", Name, name));
                         grantedLock = candidateLock; // It's a secondary lock, so we don't need to queue it or wait.
@@ -114,7 +144,7 @@ namespace Gibraltar.DistributedLocking
                     }
 
                     // Or is the lock currently held by another thread that we don't want to wait for?
-                    if (currentTurnThread != null && candidateLock.WaitForLock == false)
+                    if (currentTurnLockId != null && candidateLock.WaitForLock == false)
                     {
                         Debug.Write(string.Format("Unable to Acquire Lock (can't wait): {0}-{1}", Name, name));
 

@@ -22,6 +22,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Remoting.Messaging;
 using System.Threading;
 
 namespace Gibraltar.DistributedLocking.Internal
@@ -39,9 +40,9 @@ namespace Gibraltar.DistributedLocking.Internal
         private readonly IDistributedLockProvider _provider;
         private readonly string _name;
 
-        private DistributedLock _currentLockTurn; //protected by curentLockLock
-        private IDisposable _lock;//protected by curentLockLock
-        private IDisposable _lockRequest;//protected by curentLockLock
+        private DistributedLock _currentLockTurn; //protected by currentLockLock
+        private IDisposable _lock;//protected by currentLockLock
+        private IDisposable _lockRequest;//protected by currentLockLock
         private DateTimeOffset _minTimeNextTurn = DateTimeOffset.MinValue;
         private bool _disposed;
 
@@ -100,25 +101,27 @@ namespace Gibraltar.DistributedLocking.Internal
         /// Check the thread with the current turn for the lock and grant a secondary lock if applicable.
         /// </summary>
         /// <param name="candidateLock">An unexpired lock request on the current thread, or null to just check the turn thread.</param>
-        /// <returns>The Thread with the current turn for the lock, or null if there are none holding or waiting.</returns>
-        internal Thread CheckCurrentTurnThread(DistributedLock candidateLock)
+        /// <returns>The activity Id with the current turn for the lock, or null if there are none holding or waiting.</returns>
+        internal Guid? CheckCurrentTurnThread(DistributedLock candidateLock)
         {
-            if (candidateLock != null && candidateLock.OwningThread != Thread.CurrentThread)
+            var currentLockId = DistributedLockManager.CurrentLockId;
+
+            if (candidateLock != null && candidateLock.OwningLockId != currentLockId)
                 throw new InvalidOperationException("A lock request may only be waited on by the thread which created it.");
 
             lock (_currentLockLock)
             {
                 if (_currentLockTurn != null)
                 {
-                    Thread currentOwningThread = _currentLockTurn.OwningThread;
-                    if (candidateLock != null && Thread.CurrentThread == currentOwningThread)
+                    var currentOwningLockId = _currentLockTurn.OwningLockId;
+                    if (candidateLock != null && currentLockId == currentOwningLockId)
                     {
                         candidateLock.GrantTheLock(_currentLockTurn); // Set it as a secondary lock on that holder (same thread).
                         if (candidateLock.ActualLock == _currentLockTurn) // Sanity-check that it was successful.
                             candidateLock.OurLockProxy = this; // So its dispose-on-close setting pass-through can function.
                     }
 
-                    return currentOwningThread; // Whether it's a match or some other thread.
+                    return currentOwningLockId; // Whether it's a match or some other thread.
                 }
 
                 return null; // No thread owns the lock.
@@ -134,7 +137,7 @@ namespace Gibraltar.DistributedLocking.Internal
             if (string.Equals(lockRequest.Name, _name, StringComparison.OrdinalIgnoreCase) == false)
                 throw new InvalidOperationException("A lock request may not be queued to a proxy for a different full name.");
 
-            if (lockRequest.OwningThread != Thread.CurrentThread)
+            if (lockRequest.OwningLockId != DistributedLockManager.CurrentLockId)
                 throw new InvalidOperationException("A lock request may only be queued by the thread which created it.");
 
             _waitQueue.Enqueue(lockRequest);
@@ -153,7 +156,7 @@ namespace Gibraltar.DistributedLocking.Internal
             if (string.Equals(lockRequest.Name, _name, StringComparison.OrdinalIgnoreCase) == false)
                 throw new InvalidOperationException("A lock request may not be queued to a proxy for a different full name.");
 
-            if (lockRequest.OwningThread != Thread.CurrentThread)
+            if (lockRequest.OwningLockId != DistributedLockManager.CurrentLockId)
                 throw new InvalidOperationException("A lock request may only be waited on by the thread which created it.");
 
             lockRequest.OurLockProxy = this; // Mark the request as pending with us.
@@ -176,19 +179,12 @@ namespace Gibraltar.DistributedLocking.Internal
                         {
                             if (_currentLockTurn != null)
                             {
-                                Thread currentOwningThread = _currentLockTurn.OwningThread;
-                                int currentOwningThreadId = -1;
-                                string currentOwningThreadName = "null";
-                                if (currentOwningThread != null) // To make sure we can't get a null-ref exception from logging this...
-                                {
-                                    currentOwningThreadId = currentOwningThread.ManagedThreadId;
-                                    currentOwningThreadName = currentOwningThread.Name ?? string.Empty;
-                                }
+                                var currentOwningActivityId = _currentLockTurn.OwningLockId;
 
                                 Trace.WriteLine(string.Format("{0}\r\nA lock request gave up because it is still being held by another thread.\r\n" +
-                                                              "Lock file: {1}\r\nCurrent holding thread: {2} ({3})",
+                                                              "Lock file: {1}\r\nCurrent holding Activity: {2}",
                                     lockRequest.WaitForLock ? "Lock request timed out" : "Lock request couldn't wait",
-                                    _name, currentOwningThreadId, currentOwningThreadName));
+                                    _name, currentOwningActivityId));
                             }
                             else
                             {

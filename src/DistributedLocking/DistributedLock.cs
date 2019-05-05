@@ -33,7 +33,7 @@ namespace Gibraltar.DistributedLocking
         private readonly bool _waitForLock;
         private readonly object _myLock = new object(); // For locking inter-thread signals to this instance.
 
-        private Thread _owningThread;
+        private Guid _owningLockId;
         private object _owningObject;
         private DistributedLockProxy _ourLockProxy;
         private DistributedLock _actualLock; // LOCKED by MyLock
@@ -48,8 +48,8 @@ namespace Gibraltar.DistributedLocking
 
         internal DistributedLock(object requester, string name, int timeoutSeconds)
         {
+            _owningLockId = DistributedLockManager.CurrentLockId;
             _owningObject = requester;
-            _owningThread = Thread.CurrentThread;
             Name = name;
             _actualLock = null;
             _myTurn = false;
@@ -83,14 +83,9 @@ namespace Gibraltar.DistributedLocking
         public object Owner => _owningObject;
 
         /// <summary>
-        /// The thread that created and waits on this request and owns the lock when this request is granted.
-        /// </summary>
-        public Thread OwningThread => _owningThread;
-
-        /// <summary>
         /// The ManagedThreadId of the thread that owns this lock instance.
         /// </summary>
-        public int OwningThreadId => _owningThread.ManagedThreadId;
+        public Guid OwningLockId => _owningLockId;
 
         /// <summary>
         /// Whether this lock request is willing to wait (finite) for the lock or return immediately if not available.
@@ -208,7 +203,7 @@ namespace Gibraltar.DistributedLocking
             {
                 try
                 {
-                    if (actualLock != null && actualLock.IsDisposed == false && actualLock.OwningThread == _owningThread &&
+                    if (actualLock != null && actualLock.IsDisposed == false && actualLock.OwningLockId == _owningLockId &&
                         string.Equals(actualLock.Name, Name, StringComparison.OrdinalIgnoreCase))
                     {
                         // We don't need to lock around this because we're bypassing the proxy's queue and staying only on our own thread.
@@ -297,7 +292,6 @@ namespace Gibraltar.DistributedLocking
                     {
                         _disposed = true; // Make sure we don't do it more than once.
                         _waitTimeout = DateTimeOffset.MinValue;
-                        _owningThread = null;
                         _owningObject = null;
                     }
 
