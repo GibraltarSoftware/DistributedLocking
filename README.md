@@ -12,6 +12,7 @@ The easiest way to add this library to your project is via the official NuGet pa
 Using DistributedLocking is easy:  You define a DistributedLockManager which determines the scope of a set of locks 
 and the underlying infrastructure used to perform distributed locks (files or SQL Server) and then ask it for named locks.
 You can provide a timeout for how long you'll wait for the lock or specify zero to give up immediately if it isn't available.
+
 ```CS
 var lockManager = new DistributedLockManager(new SqlLockProvider(_connectionString));
 
@@ -53,6 +54,7 @@ to determine if it has already been acquired (and then pass the lock around).  D
 to detect that the current thread of execute already has the lock that is being requested and add a new child
 scope to that lock very quickly and efficiently.  The lock is only released when all requesters have released
 their lock.
+
 ```CS
 var lockManager = new DistributedLockManager(new SqlLockProvider(_connectionString));
 
@@ -75,12 +77,19 @@ using (lockManager.Lock(this, "My Lock Name", 60))
 innermostLock.Dispose(); //until now.  Right now it gets released.
 ```
 
-## Just Avoid Async/Await
+## Handling Async/Await and other Multithreaded Scenarios
 
-Due to the way the internals of the DistributedLockManager work it isn't presently safe to use with
-async/await within a lock.  The reason is that it makes assumptions about locks being associatd with
-threads that are not valid once you start using async/await within an area that is locked with this 
-library.
+Internally, DistributedLockManager associates locks with the Logical Call Context.  This allows
+locks to be used between multiple calls on the same async/await chain.  This works even if the
+async operations resume on a different thread.  
+
+This can be overly permissive in scenarios where a parent thread or activity is spawning child
+threads or a parallel set of activities that should use independent locks.  In that situation,
+call DistributedLockManager.LockBarrier() to reset the lock Id within the child activity.  Each
+call to LockBarrier isolates child locks from the parent activity context.
+
+As a best practice, call LockBarrier() immediately after creating a new thread using the
+thread pool (ThreadPool.QueueWorkItem) or Task.Run / TaskFactory.Current.StartNew.
 
 # How It Works
 
