@@ -22,7 +22,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Runtime.Remoting.Messaging;
 using System.Threading;
 
 namespace Gibraltar.DistributedLocking.Internal

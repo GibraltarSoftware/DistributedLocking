@@ -1,7 +1,7 @@
 ﻿#region File Header and License
 // /*
 //    DistributedLockManager.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2021 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.Remoting.Messaging;
 using System.Threading;
 using Gibraltar.DistributedLocking.Internal;
 
@@ -34,10 +33,10 @@ namespace Gibraltar.DistributedLocking
     /// by locking a file on disk.  Designed for use with the Using statement as opposed to the Lock statement.</remarks>
     public class DistributedLockManager
     {
-        private const string ContextLockName = "Distributed_Lock_Id";
-
         private readonly IDistributedLockProvider _provider;
         private readonly ConcurrentDictionary<string, DistributedLockProxy> _proxies = new ConcurrentDictionary<string, DistributedLockProxy>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly AsyncLocal<Guid?> LocalContext = new AsyncLocal<Guid?>();
 
         /// <summary>
         /// Create a new distributed lock manager, denoting a scope of locks.
@@ -80,12 +79,11 @@ namespace Gibraltar.DistributedLocking
         {
             get
             {
-                var contextId = CallContext.LogicalGetData(ContextLockName) as Guid?;
+                var contextId = LocalContext.Value;
 
                 if (contextId == null)
                 {
-                    contextId = Guid.NewGuid();
-                    CallContext.LogicalSetData(ContextLockName, contextId);
+                    LocalContext.Value = contextId = Guid.NewGuid();
                 }
 
                 return contextId.Value;
@@ -97,7 +95,7 @@ namespace Gibraltar.DistributedLocking
         /// </summary>
         public static void LockBarrier()
         {
-            CallContext.LogicalSetData(ContextLockName, Guid.NewGuid());
+            LocalContext.Value = Guid.NewGuid();
         }
 
         /// <summary>

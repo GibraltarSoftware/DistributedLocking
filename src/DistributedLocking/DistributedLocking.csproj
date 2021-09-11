@@ -1,76 +1,45 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-  <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{DEBC0303-9943-4BCC-9B01-29A0BA10764B}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Gibraltar.DistributedLocking</RootNamespace>
-    <AssemblyName>Gibraltar.DistributedLocking</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>DistributedLocking.snk</AssemblyOriginatorKeyFile>
-    <TargetFrameworkProfile />
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Debug\Gibraltar.DistributedLocking.xml</DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Release\Gibraltar.DistributedLocking.xml</DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Xml" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="LockException.cs" />
-    <Compile Include="Internal\FileLock.cs" />
-    <Compile Include="FileLockProvider.cs" />
-    <Compile Include="IDistributedLockProvider.cs" />
-    <Compile Include="Internal\CommonCentralLogic.cs" />
-    <Compile Include="Internal\Extensions.cs" />
-    <Compile Include="Internal\Win32Helper.cs" />
-    <Compile Include="DistributedLock.cs" />
-    <Compile Include="DistributedLockManager.cs" />
-    <Compile Include="Internal\DistributedLockProxy.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Internal\SqlLock.cs" />
-    <Compile Include="Internal\SqlLockMode.cs" />
-    <Compile Include="LockTimeoutException.cs" />
-    <Compile Include="SqlLockProvider.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="DistributedLocking.nuspec" />
-    <None Include="DistributedLocking.snk" />
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PostBuildEvent>if $(ConfigurationName) == Release $(ProjectDir)..\..\dependencies\NuGet.exe Pack $(ProjectPath) -Prop Configuration=Release</PostBuildEvent>
-  </PropertyGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFrameworks>net46;net461;net462;netstandard2.0</TargetFrameworks>
+		<OutputType>Library</OutputType>
+		<RootNamespace>Gibraltar.DistributedLocking</RootNamespace>
+		<AssemblyName>Gibraltar.DistributedLocking</AssemblyName>
+		<SignAssembly>true</SignAssembly>
+		<AssemblyOriginatorKeyFile>DistributedLocking.snk</AssemblyOriginatorKeyFile>
+		<DocumentationFile>bin\Gibraltar.DistributedLocking.xml</DocumentationFile>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<Authors>Gibraltar Software, Inc.</Authors>
+		<PackageTags>Distributed lock sql sqlserver mutex sp_getapplock</PackageTags>
+		<PackageProjectUrl>https://github.com/GibraltarSoftware/DistributedLocking</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/GibraltarSoftware/DistributedLocking</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+		<PackageIcon>loupe-192x192.png</PackageIcon>
+		<PackageIconUrl />
+		<Product>Gibraltar Software Distributed Locking</Product>
+		<Version>1.2.0.0</Version>
+		<Description>Easily manage locks between processes and computers using this re-entrant locking library.  Uses a common file system, network share, or SQL Database to let you create arbitrary locks in your distributed application with a simple syntax.</Description>
+		<Copyright>Copyright © 2008-2021 Gibraltar Software, Inc.</Copyright>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Include="..\..\LICENSE.txt">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+		<None Include="..\Assets\loupe-192x192.png">
+			<Pack>True</Pack>
+			<PackagePath></PackagePath>
+		</None>
+	</ItemGroup>
+	<Choose>
+		<When Condition="'$(TargetFramework)' == 'net461' Or '$(TargetFramework)' == 'net462' Or '$(TargetFramework)' == 'net46'">
+			<ItemGroup>
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<PackageReference Include="System.Data.SqlClient" Version="4.5.0" />
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
 </Project>

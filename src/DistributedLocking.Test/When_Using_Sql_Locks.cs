@@ -27,7 +27,12 @@ namespace Gibraltar.DistributedLocking.Test
     [TestFixture]
     public class When_Using_Sql_Locks
     {
-        private const string ConnectionStringTemplate = "Data Source={0};Initial Catalog={1};Integrated Security=True;MultipleActiveResultSets=True;Network Library=dbmssocn";
+#if NETCOREAPP
+        private const string ConnectionStringTemplate = "Data Source=tcp:{0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;";
+#else
+        private const string ConnectionStringTemplate = "Data Source={0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;" +
+                                                        "Network Library=dbmssocn;";
+#endif
         private const string MultiprocessLockName = "LockRepository";
         private const string DefaultLockDatabase = "lock_test";
         private const string SecondLockDatabase = "tempdb";
