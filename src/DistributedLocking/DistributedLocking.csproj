@@ -11,8 +11,13 @@
 		<Authors>Gibraltar Software, Inc.</Authors>
 		<PackageTags>Distributed lock sql sqlserver mutex sp_getapplock</PackageTags>
 		<PackageProjectUrl>https://github.com/GibraltarSoftware/DistributedLocking</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/GibraltarSoftware/DistributedLocking</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
+		<RepositoryUrl>https://github.com/GibraltarSoftware/DistributedLocking</RepositoryUrl>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<DebugType>embedded</DebugType>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
 		<PackageIcon>loupe-192x192.png</PackageIcon>
 		<PackageIconUrl />
@@ -20,6 +25,12 @@
 		<Version>1.2.0.0</Version>
 		<Description>Easily manage locks between processes and computers using this re-entrant locking library.  Uses a common file system, network share, or SQL Database to let you create arbitrary locks in your distributed application with a simple syntax.</Description>
 		<Copyright>Copyright © 2008-2021 Gibraltar Software, Inc.</Copyright>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(TF_BUILD)' == 'true'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
 	</PropertyGroup>
 	<ItemGroup>
 		<None Include="..\..\LICENSE.txt">
@@ -30,6 +41,12 @@
 			<Pack>True</Pack>
 			<PackagePath></PackagePath>
 		</None>
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0">
+	    <PrivateAssets>all</PrivateAssets>
+	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	  </PackageReference>
 	</ItemGroup>
 	<Choose>
 		<When Condition="'$(TargetFramework)' == 'net461' Or '$(TargetFramework)' == 'net462' Or '$(TargetFramework)' == 'net46'">
