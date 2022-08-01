@@ -28,10 +28,10 @@ namespace Gibraltar.DistributedLocking.Test
     public class When_Using_Sql_Locks
     {
 #if NETCOREAPP
-        private const string ConnectionStringTemplate = "Data Source=tcp:{0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;";
+        private const string ConnectionStringTemplate = "Data Source=tcp:{0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;User Id=sa;Password=f4rd+GM%";
 #else
         private const string ConnectionStringTemplate = "Data Source={0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;" +
-                                                        "Network Library=dbmssocn;";
+                                                        "Network Library=dbmssocn;User Id=sa;Password=f4rd+GM%";
 #endif
         private const string MultiprocessLockName = "LockRepository";
         private const string DefaultLockDatabase = "lock_test";

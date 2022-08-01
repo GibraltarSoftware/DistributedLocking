@@ -165,7 +165,7 @@ namespace Gibraltar.DistributedLocking.Internal
             if (ourTurn == false)
             {
                 // It's not our turn yet, we need to wait our turn.  Are we willing to wait?
-                if (lockRequest.WaitForLock && lockRequest.WaitTimeout > DateTimeOffset.Now)
+                if (lockRequest.WaitForLock && lockRequest.IsExpired == false)
                     ourTurn = lockRequest.AwaitTurnOrTimeout();
 
                 // Still not our turn?
@@ -246,10 +246,9 @@ namespace Gibraltar.DistributedLocking.Internal
         private bool TryGetLock(DistributedLock currentRequest)
         {
             var waitForLock = currentRequest.WaitForLock;
-            var lockTimeout = currentRequest.WaitTimeout;
             var validLock = false;
 
-            while (waitForLock == false || DateTimeOffset.Now < lockTimeout)
+            while (waitForLock == false || currentRequest.IsExpired)
             {
                 if (DateTimeOffset.Now >= _minTimeNextTurn) // Make sure we aren't in a back-off delay.
                 {

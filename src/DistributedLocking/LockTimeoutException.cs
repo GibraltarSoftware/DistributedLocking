@@ -32,10 +32,10 @@ namespace Gibraltar.DistributedLocking
         /// </summary>
         /// <param name="providerName">The name of the distributed lock provider</param>
         /// <param name="lockName">The name of the lock to get (locks are a combination of index and this name)</param>
-        /// <param name="timeoutSeconds">The maximum number of seconds to wait on the lock before giving up.</param>
+        /// <param name="timeout">The duration the lock waited to timeout.</param>
         /// <param name="message">The error message string.</param>
-        public LockTimeoutException(string providerName, string lockName, int timeoutSeconds, string message)
-            :this(providerName, lockName, timeoutSeconds, message, null)
+        public LockTimeoutException(string providerName, string lockName, TimeSpan timeout, string message)
+            :this(providerName, lockName, timeout, message, null)
         {
         }
 
@@ -44,16 +44,17 @@ namespace Gibraltar.DistributedLocking
         /// </summary>
         /// <param name="providerName">The name of the distributed lock provider</param>
         /// <param name="lockName">The name of the lock to get (locks are a combination of index and this name)</param>
-        /// <param name="timeoutSeconds">The maximum number of seconds to wait on the lock before giving up.</param>
+        /// <param name="timeout">The duration the lock waited to timeout.</param>
         /// <param name="message">The error message string.</param>
         /// <param name="innerException">The exception that is the cause of the current exception, or a
         /// null reference if no inner exception is specified.</param>
-        public LockTimeoutException(string providerName, string lockName, int timeoutSeconds, string message, Exception innerException)
+        public LockTimeoutException(string providerName, string lockName, TimeSpan timeout, string message, Exception innerException)
             : base(message, innerException)
         {
             ProviderName = providerName;
             LockName = lockName;
-            TimeoutSeconds = timeoutSeconds;
+            Timeout = timeout;
+            TimeoutSeconds = Convert.ToInt32(Timeout.TotalSeconds);
 
             if (Debugger.IsAttached)
                 Debugger.Break();
@@ -68,6 +69,11 @@ namespace Gibraltar.DistributedLocking
         /// The number of seconds the lock waited before it timed out.
         /// </summary>
         public int TimeoutSeconds { get; }
+
+        /// <summary>
+        /// The duration the lock waited before it timed out.
+        /// </summary>
+        public TimeSpan Timeout { get; }
 
         /// <summary>
         /// The name of the lock being acquired
