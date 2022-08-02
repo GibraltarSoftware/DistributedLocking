@@ -19,6 +19,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
@@ -28,10 +29,10 @@ namespace Gibraltar.DistributedLocking.Test
     public class When_Using_Sql_Locks
     {
 #if NETCOREAPP
-        private const string ConnectionStringTemplate = "Data Source=tcp:{0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;";
+        private const string ConnectionStringTemplate = "Data Source=tcp:{0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;User Id=sa;Password=f4rd+GM%";
 #else
         private const string ConnectionStringTemplate = "Data Source={0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;" +
-                                                        "Network Library=dbmssocn;";
+                                                        "Network Library=dbmssocn;User Id=sa;Password=f4rd+GM%";
 #endif
         private const string MultiprocessLockName = "LockRepository";
         private const string DefaultLockDatabase = "lock_test";
@@ -43,9 +44,47 @@ namespace Gibraltar.DistributedLocking.Test
         {
             var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 
-            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
             {
                 Assert.IsNotNull(outerLock, "Unable to acquire lock");
+            }
+        }
+
+        [Test]
+        public void Can_Acquire_Lock_With_Integer_Timeout()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 1))
+            {
+                Assert.IsNotNull(outerLock, "Unable to acquire the lock");
+            }
+        }
+
+        [Test]
+        public void Can_Acquire_Lock_With_CancellationToken()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            var tokenSource = new CancellationTokenSource(1000);
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, tokenSource.Token))
+            {
+                Assert.IsNotNull(outerLock, "Unable to acquire the lock");
+            }
+        }
+
+        [Test]
+        public void Can_Timeout_Lock_Using_CancellationToken()
+        {
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
+            {
+                var tokenSource = new CancellationTokenSource(1000);
+                using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, tokenSource.Token))
+                {
+                    Assert.IsNull(otherLock, "Another thread was allowed to get the lock");
+                }
             }
         }
 
@@ -56,7 +95,7 @@ namespace Gibraltar.DistributedLocking.Test
 
             var unsafeLockName = "\"M<>\"\\a/ry/ h**ad:>> a\\/:*?\"<>| li*tt|le|| la\"mb.?";
 
-            using (var outerLock = lockManager.Lock(this, unsafeLockName, 0))
+            using (var outerLock = lockManager.Lock(this, unsafeLockName))
             {
                 Assert.IsNotNull(outerLock, "Unable to acquire the lock");
             }
@@ -67,11 +106,11 @@ namespace Gibraltar.DistributedLocking.Test
         {
             var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 
-            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
             {
                 Assert.IsNotNull(outerLock, "Unable to acquire outer lock the repository");
 
-                using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+                using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
                 {
                     Assert.IsNull(otherLock, "Another thread was allowed to get the lock");
                 }
@@ -84,16 +123,16 @@ namespace Gibraltar.DistributedLocking.Test
             var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 
             // First test new re-entrant lock capability.
-            using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+            using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
             {
                 Assert.IsNotNull(outerLock, "Unable to outer lock the repository");
 
                 // Now check that we can get the same lock on the same thread.
-                using (var middleLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                using (var middleLock = lockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(middleLock, "Unable to reenter the repository lock on the same thread");
 
-                    using (var innerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                    using (var innerLock = lockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(innerLock, "Unable to reenter the repository lock on the same thread twice");
                     }
@@ -107,14 +146,14 @@ namespace Gibraltar.DistributedLocking.Test
             var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 
             // Now test other scenarios while another thread holds the lock.
-            using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+            using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
             {
                 Assert.IsNotNull(testLock, "Unable to lock the repository");
 
                 //now that I have the test lock, it should fail if I try to get it again.
                 Assert.Catch<LockTimeoutException>(() =>
                         {
-                            using (var failedLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                            using (var failedLock = lockManager.Lock(this, MultiprocessLockName))
                             {
                                 Assert.IsNull(failedLock, "Duplicate lock was allowed.");
                             }
@@ -128,11 +167,11 @@ namespace Gibraltar.DistributedLocking.Test
             var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 
             // Now test other scenarios while another thread holds the lock.
-            using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName + "_alternate", 0))
+            using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName + "_alternate"))
             {
                 Assert.IsNotNull(otherLock, "Unable to establish first lock in scope.");
 
-                using (var testLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                using (var testLock = lockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(testLock, "Unable to establish second lock in scope.");
                 }
@@ -145,17 +184,17 @@ namespace Gibraltar.DistributedLocking.Test
             var firstLockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 
             // Now test other scenarios while another thread holds the lock.
-            using (var testLock = firstLockManager.Lock(this, MultiprocessLockName, 0))
+            using (var testLock = firstLockManager.Lock(this, MultiprocessLockName))
             {
                 Assert.IsNotNull(testLock, "Unable to establish lock on first scope");
 
                 var secondLockManager = new DistributedLockManager(GetLockProvider(SecondLockDatabase));
-                using (var secondTestLock = secondLockManager.Lock(this, MultiprocessLockName, 0))
+                using (var secondTestLock = secondLockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(secondTestLock, "Unable to establish lock on second scope.");
 
                     var thirdLockManager = new DistributedLockManager(GetLockProvider(ThirdLockDatabase));
-                    using (var thirdTestLock = thirdLockManager.Lock(this, MultiprocessLockName, 0))
+                    using (var thirdTestLock = thirdLockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(thirdTestLock, "Unable to establish lock on third scope.");
                     }
@@ -168,7 +207,7 @@ namespace Gibraltar.DistributedLocking.Test
         {
             var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
 
-            using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+            using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
             {
                 Assert.IsNotNull(testLock, "Unable to lock the repository");
 
@@ -199,7 +238,7 @@ namespace Gibraltar.DistributedLocking.Test
 
             for (var curIteration = 0; curIteration < lockIterations; curIteration++)
             {
-                using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(outerLock, "Unable to acquire lock on iteration {0:N0}", curIteration);
                 }
@@ -217,7 +256,7 @@ namespace Gibraltar.DistributedLocking.Test
             {
                 try
                 {
-                    var outerLock = lockManager.Lock(this, MultiprocessLockName, 0);
+                    var outerLock = lockManager.Lock(this, MultiprocessLockName);
 
                     try
                     {

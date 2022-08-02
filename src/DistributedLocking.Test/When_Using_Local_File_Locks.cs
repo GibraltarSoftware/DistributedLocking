@@ -20,6 +20,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using NUnit.Framework;
 
 namespace Gibraltar.DistributedLocking.Test
@@ -37,14 +38,80 @@ namespace Gibraltar.DistributedLocking.Test
 
             try
             {
-                using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(outerLock, "Unable to acquire the lock");
                 }
             }
             finally
             {
-                Directory.Delete(lockScopePath);
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
+            }
+        }
+
+        [Test]
+        public void Can_Acquire_Lock_With_Integer_Timeout()
+        {
+            var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+
+            try
+            {
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 1))
+                {
+                    Assert.IsNotNull(outerLock, "Unable to acquire the lock");
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
+            }
+        }
+
+        [Test]
+        public void Can_Acquire_Lock_With_CancellationToken()
+        {
+            var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+
+            try
+            {
+                var tokenSource = new CancellationTokenSource(1000);
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName, tokenSource.Token))
+                {
+                    Assert.IsNotNull(outerLock, "Unable to acquire the lock");
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
+            }
+        }
+
+        [Test]
+        public void Can_Timeout_Lock_Using_CancellationToken()
+        {
+            var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+
+            try
+            {
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
+                {
+                    var tokenSource = new CancellationTokenSource(1000);
+                    using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, tokenSource.Token))
+                    {
+                        Assert.IsNull(otherLock, "Another thread was allowed to get the lock");
+                    }
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
             }
         }
 
@@ -58,28 +125,29 @@ namespace Gibraltar.DistributedLocking.Test
             {
                 var unsafeLockName = "\"M<>\"\\a/ry/ h**ad:>> a\\/:*?\"<>| li*tt|le|| la\"mb.?";
 
-                using (var outerLock = lockManager.Lock(this, unsafeLockName, 0))
+                using (var outerLock = lockManager.Lock(this, unsafeLockName))
                 {
                     Assert.IsNotNull(outerLock, "Unable to acquire the lock");
                 }
             }
             finally
             {
-                Directory.Delete(lockScopePath);
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
             }
         }
 
         [Test]
-        public void Can_Not_Aquire_Same_Lock_On_Another_Thread()
+        public void Can_Not_Acquire_Same_Lock_On_Another_Thread()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
             var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
 
             try
             {
-                using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
                 {
-                    using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+                    using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
                     {
                         Assert.IsNull(otherLock, "Another thread was allowed to get the lock");
                     }
@@ -87,7 +155,8 @@ namespace Gibraltar.DistributedLocking.Test
             }
             finally
             {
-                Directory.Delete(lockScopePath);
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
             }
         }
 
@@ -100,16 +169,16 @@ namespace Gibraltar.DistributedLocking.Test
             try
             {
                 // First test new re-entrant lock capability.
-                using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(outerLock, "Unable to outer lock the repository");
 
                     // Now check that we can get the same lock on the same thread.
-                    using (var middleLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                    using (var middleLock = lockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(middleLock, "Unable to reenter the repository lock on the same thread");
 
-                        using (var innerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                        using (var innerLock = lockManager.Lock(this, MultiprocessLockName))
                         {
                             Assert.IsNotNull(innerLock, "Unable to reenter the repository lock on the same thread twice");
                         }
@@ -118,7 +187,8 @@ namespace Gibraltar.DistributedLocking.Test
             }
             finally
             {
-                Directory.Delete(lockScopePath);
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
             }
         }
 
@@ -131,14 +201,14 @@ namespace Gibraltar.DistributedLocking.Test
             try
             {
                 // Now test other scenarios while another thread holds the lock.
-                using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+                using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
                 {
                     Assert.IsNotNull(testLock, "Unable to lock the repository");
 
                     //now that I have the test lock, it should fail if I try to get it again.
                     Assert.Catch<LockTimeoutException>(() =>
                     {
-                        using (var failedLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                        using (var failedLock = lockManager.Lock(this, MultiprocessLockName))
                         {
                             Assert.IsNull(failedLock, "Duplicate lock was allowed.");
                         }
@@ -147,7 +217,8 @@ namespace Gibraltar.DistributedLocking.Test
             }
             finally
             {
-                Directory.Delete(lockScopePath);
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
             }
         }
 
@@ -160,11 +231,11 @@ namespace Gibraltar.DistributedLocking.Test
             try
             {
                 // Now test other scenarios while another thread holds the lock.
-                using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName + "_alternate", 0))
+                using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName + "_alternate"))
                 {
                     Assert.IsNotNull(otherLock, "Unable to establish first lock in scope.");
 
-                    using (var testLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                    using (var testLock = lockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(testLock, "Unable to establish second lock in scope.");
                     }
@@ -172,7 +243,8 @@ namespace Gibraltar.DistributedLocking.Test
             }
             finally
             {
-                Directory.Delete(lockScopePath);
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
             }
         }
 
@@ -189,22 +261,22 @@ namespace Gibraltar.DistributedLocking.Test
             try
             {
                 // Now test other scenarios while another thread holds the lock.
-                using (var testLock = firstLockManager.Lock(this, MultiprocessLockName, 0))
+                using (var testLock = firstLockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(testLock, "Unable to establish lock on first scope");
 
                     var secondLockManager = new DistributedLockManager(new FileLockProvider(secondTestRepositoryPath));
-                    using (var secondTestLock = secondLockManager.Lock(this, MultiprocessLockName, 0))
+                    using (var secondTestLock = secondLockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(secondTestLock, "Unable to establish lock on second scope.");
 
                         var thirdLockManager = new DistributedLockManager(new FileLockProvider(thirdTestRepositoryPath));
-                        using (var thirdTestLock = thirdLockManager.Lock(this, MultiprocessLockName, 0))
+                        using (var thirdTestLock = thirdLockManager.Lock(this, MultiprocessLockName))
                         {
                             Assert.IsNotNull(thirdTestLock, "Unable to establish lock on third scope.");
 
                             var forthLockManager = new DistributedLockManager(new FileLockProvider(fourthTestRepositoryPath));
-                            using (var fourthTestLock = forthLockManager.Lock(this, MultiprocessLockName, 0))
+                            using (var fourthTestLock = forthLockManager.Lock(this, MultiprocessLockName))
                             {
                                 Assert.IsNotNull(fourthTestLock, "Unable to establish lock on fourth scope.");
                             }
@@ -240,7 +312,7 @@ namespace Gibraltar.DistributedLocking.Test
             {
                 var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
 
-                using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName, 0))
+                using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
                 {
                     Assert.IsNotNull(testLock, "Unable to lock the repository");
 
@@ -279,7 +351,7 @@ namespace Gibraltar.DistributedLocking.Test
             {
                 for (var curIteration = 0; curIteration < lockIterations; curIteration++)
                 {
-                    using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 0))
+                    using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(outerLock, "Unable to acquire lock");
                     }
@@ -287,7 +359,8 @@ namespace Gibraltar.DistributedLocking.Test
             }
             finally
             {
-                Directory.Delete(lockScopePath);
+                if (Directory.Exists(lockScopePath))
+                    Directory.Delete(lockScopePath, true);
             }
         }
     }

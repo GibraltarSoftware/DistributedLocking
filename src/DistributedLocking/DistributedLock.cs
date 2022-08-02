@@ -30,14 +30,13 @@ namespace Gibraltar.DistributedLocking
     /// When you're done with this lock, dispose it to release it.</remarks>
     public sealed class DistributedLock : IDisposable
     {
-        private readonly bool _waitForLock;
+        private readonly CancellationToken _cancellation;
         private readonly object _myLock = new object(); // For locking inter-thread signals to this instance.
 
         private Guid _owningLockId;
         private object _owningObject;
         private DistributedLockProxy _ourLockProxy;
         private DistributedLock _actualLock; // LOCKED by MyLock
-        private DateTimeOffset _waitTimeout; // LOCKED by MyLock
         private bool _myTurn; // LOCKED by MyLock
         private bool _disposed; // LOCKED by MyLock
 
@@ -46,15 +45,14 @@ namespace Gibraltar.DistributedLocking
         /// </summary>
         internal event EventHandler Disposed;
 
-        internal DistributedLock(object requester, string name, int timeoutSeconds)
+        internal DistributedLock(object requester, string name, CancellationToken token)
         {
             _owningLockId = DistributedLockManager.CurrentLockId;
             _owningObject = requester;
             Name = name;
             _actualLock = null;
             _myTurn = false;
-            _waitForLock = (timeoutSeconds > 0);
-            _waitTimeout = _waitForLock ? DateTimeOffset.Now.AddSeconds(timeoutSeconds) : DateTimeOffset.Now;
+            _cancellation = token;
         }
 
         #region Public Properties and Methods
@@ -90,23 +88,7 @@ namespace Gibraltar.DistributedLocking
         /// <summary>
         /// Whether this lock request is willing to wait (finite) for the lock or return immediately if not available.
         /// </summary>
-        public bool WaitForLock => _waitForLock;
-
-        /// <summary>
-        /// The clock time at which this lock request wants to stop waiting for the lock and give up.
-        /// (MaxValue once the lock is granted, MinValue if the lock was denied.)
-        /// </summary>
-        public DateTimeOffset WaitTimeout
-        {
-            get
-            {
-                lock(_myLock)
-                {
-                    Monitor.PulseAll(_myLock);
-                    return _waitTimeout;
-                }
-            }
-        }
+        public bool WaitForLock => _cancellation.CanBeCanceled;
 
         /// <summary>
         /// The actual holder of the lock if we are a secondary lock on the same thread, or ourselves if we hold the file lock.
@@ -141,17 +123,7 @@ namespace Gibraltar.DistributedLocking
         /// <summary>
         /// Reports if this request instance has expired and should be skipped over because no thread is still waiting on it.
         /// </summary>
-        public bool IsExpired
-        {
-            get
-            {
-                lock (_myLock)
-                {
-                    Monitor.PulseAll(_myLock);
-                    return _disposed || _waitTimeout == DateTimeOffset.MinValue;
-                }
-            }
-        }
+        public bool IsExpired => _cancellation.IsCancellationRequested;
 
         /// <summary>
         /// Whether this lock instance has been disposed (and thus does not hold any locks).
@@ -208,7 +180,6 @@ namespace Gibraltar.DistributedLocking
                     {
                         // We don't need to lock around this because we're bypassing the proxy's queue and staying only on our own thread.
                         _actualLock = actualLock;
-                        _waitTimeout = DateTimeOffset.MaxValue; // We have a lock (sort of), so reset our timeout to forever.
                     }
                     else
                     {
@@ -240,18 +211,14 @@ namespace Gibraltar.DistributedLocking
             {
                 try
                 {
-                    if (_waitForLock) // Never changes, so check it first.
+                    if (_cancellation.CanBeCanceled) // Never changes, so check it first.
                     {
                         while (_myTurn == false && _disposed == false) // Either flag and we're done waiting.
                         {
-                            var howLong = _waitTimeout - DateTimeOffset.Now;
-                            if (howLong.TotalMilliseconds <= 0)
-                            {
-                                _waitTimeout = DateTimeOffset.MinValue; // Mark timeout as expired.
-                                return false; // Our time is up!
-                            }
+                            if (_cancellation.IsCancellationRequested)
+                                return false; //we cancelled before we got the lock.
 
-                            Monitor.Wait(_myLock, howLong);
+                            Monitor.Wait(_myLock, 10);
                         }
                     }
 
@@ -291,7 +258,6 @@ namespace Gibraltar.DistributedLocking
                     if (!_disposed)
                     {
                         _disposed = true; // Make sure we don't do it more than once.
-                        _waitTimeout = DateTimeOffset.MinValue;
                         _owningObject = null;
                     }
 

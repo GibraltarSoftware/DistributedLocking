@@ -32,25 +32,25 @@ namespace Gibraltar.DistributedLocking.Test
         private readonly object m_Requester;
         private readonly DistributedLockManager m_LockManager;
         private readonly string m_Name;
-        private readonly int m_Timeout;
+        private readonly CancellationToken m_Cancellation;
         private readonly object m_Lock = new object();
 
         private DistributedLock m_RepositoryLock;
         private bool m_Exiting;
         private bool m_Exited;
 
-        private OtherThreadLockHelper(object requester, DistributedLockManager lockManager, string lockName, int timeout)
+        private OtherThreadLockHelper(object requester, DistributedLockManager lockManager, string lockName, CancellationToken token)
         {
             m_RepositoryLock = null;
             m_Requester = requester;
             m_LockManager = lockManager;
             m_Name = lockName;
-            m_Timeout = timeout;
+            m_Cancellation = token;
         }
 
-        public static OtherThreadLockHelper TryLock(object requester, DistributedLockManager lockManager, string multiprocessLockName, int timeout)
+        public static OtherThreadLockHelper TryLock(object requester, DistributedLockManager lockManager, string multiprocessLockName, CancellationToken token = default)
         {
-            var helper = new OtherThreadLockHelper(requester, lockManager, multiprocessLockName, timeout);
+            var helper = new OtherThreadLockHelper(requester, lockManager, multiprocessLockName, token);
             if (helper.GetMultiprocessLock())
                 return helper;
 
@@ -87,7 +87,7 @@ namespace Gibraltar.DistributedLocking.Test
 
             lock (m_Lock)
             {
-                m_LockManager.TryLock(this, m_Name, m_Timeout, out m_RepositoryLock);
+                m_LockManager.TryLock(this, m_Name, m_Cancellation, out m_RepositoryLock);
 
                 if (m_RepositoryLock != null)
                 {

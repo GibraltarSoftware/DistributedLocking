@@ -61,15 +61,29 @@ namespace Gibraltar.DistributedLocking
         /// <returns>A disposable Lock object if the lock was acquired.</returns>
         /// <exception cref="LockTimeoutException">Thrown if the lock can not be acquired within the timeout specified</exception>
         public DistributedLock Lock(object requester, string name, int timeoutSeconds)
+            => Lock(requester, name, GetCancellationToken(timeoutSeconds));
+
+        /// <summary>
+        /// Acquire a named lock
+        /// </summary>
+        /// <param name="requester">The object that is requesting the lock (useful for debugging purposes)</param>
+        /// <param name="name">The name of the lock to get within the current scope</param>
+        /// <param name="token">Optional.  A cancellation token to limit how long to wait for the lock.</param>
+        /// <returns>A disposable Lock object if the lock was acquired.</returns>
+        /// <exception cref="LockTimeoutException">Thrown if the lock can not be acquired within the timeout specified</exception>
+        public DistributedLock Lock(object requester, string name, CancellationToken token = default)
         {
-            if (TryLock(requester, name, timeoutSeconds, out var grantedLock))
+            var requestStartTime = DateTime.UtcNow;
+            if (TryLock(requester, name, token, out var grantedLock))
             {
                 return grantedLock;
             }
+            
+            var waitDuration = DateTime.UtcNow - requestStartTime;
 
-            var message = (timeoutSeconds > 0) ? string.Format("Unable to acquire lock {0} within {1} seconds", name, timeoutSeconds)
-                                 : string.Format("Unable to acquire lock {0} immediately", name);
-            throw new LockTimeoutException(Name, name, timeoutSeconds, message);
+            var message = (token == CancellationToken.None) ? string.Format("Unable to acquire lock {0} immediately", name)
+            : string.Format("Unable to acquire lock {0} within {1}", name, waitDuration);
+            throw new LockTimeoutException(Name, name, waitDuration, message);
         }
 
         /// <summary>
@@ -107,6 +121,18 @@ namespace Gibraltar.DistributedLocking
         /// <param name="grantedLock">The disposable Lock object if the lock was acquired.</param>
         /// <returns>True if the lock was acquired or false if the lock timed out.</returns>
         public bool TryLock(object requester, string name, int timeoutSeconds, out DistributedLock grantedLock)
+         => TryLock(requester, name, GetCancellationToken(timeoutSeconds), out grantedLock);
+
+
+        /// <summary>
+        /// Attempt to lock the repository with the provided index path.
+        /// </summary>
+        /// <param name="requester">The object that is requesting the lock (useful for debugging purposes)</param>
+        /// <param name="name">The name of the lock to get within the current scope</param>
+        /// <param name="token">The cancellation token to stop waiting for the lock.</param>
+        /// <param name="grantedLock">The disposable Lock object if the lock was acquired.</param>
+        /// <returns>True if the lock was acquired or false if the lock timed out.</returns>
+        public bool TryLock(object requester, string name, CancellationToken token, out DistributedLock grantedLock)
         {
             if (requester == null)
                 throw new ArgumentNullException(nameof(requester));
@@ -116,16 +142,16 @@ namespace Gibraltar.DistributedLocking
 
             grantedLock = null;
 
-            var candidateLock = new DistributedLock(requester, name, timeoutSeconds);
+            var candidateLock = new DistributedLock(requester, name, token);
 
             // Lookup or create the proxy for the requested lock.
             var lockProxy = _proxies.GetOrAdd(candidateLock.Name, (key) =>
-                                                   {
-                                                       var newProxy = new DistributedLockProxy(_provider, key);
+            {
+                var newProxy = new DistributedLockProxy(_provider, key);
 
-                                                       newProxy.Disposed += LockProxy_Disposed;
-                                                       return newProxy;
-                                                   });
+                newProxy.Disposed += LockProxy_Disposed;
+                return newProxy;
+            });
 
             lock (lockProxy)
             {
@@ -177,6 +203,13 @@ namespace Gibraltar.DistributedLocking
             Debug.Write(string.Format(candidateLock == null ? "Unable to Acquire Lock: {0}-{1}" : "Lock Acquired: {0}-{1}", Name, name));
             grantedLock = candidateLock;
             return (grantedLock != null);
+        }
+
+        private CancellationToken GetCancellationToken(int timeoutSeconds)
+        {
+            //If they specified zero or less for seconds we presume they won't wait and want to immediately timeout.
+            //If greater then use that number of seconds.
+            return timeoutSeconds <= 0 ? CancellationToken.None : new CancellationTokenSource(new TimeSpan(0, 0, timeoutSeconds)).Token;
         }
 
         #region Event Handlers
