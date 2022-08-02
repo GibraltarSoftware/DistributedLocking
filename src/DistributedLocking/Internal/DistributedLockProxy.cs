@@ -248,7 +248,7 @@ namespace Gibraltar.DistributedLocking.Internal
             var waitForLock = currentRequest.WaitForLock;
             var validLock = false;
 
-            while (waitForLock == false || currentRequest.IsExpired)
+            while (waitForLock == false || currentRequest.IsExpired == false)
             {
                 if (DateTimeOffset.Now >= _minTimeNextTurn) // Make sure we aren't in a back-off delay.
                 {

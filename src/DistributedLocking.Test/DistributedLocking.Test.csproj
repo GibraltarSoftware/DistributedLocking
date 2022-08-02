@@ -6,7 +6,7 @@
 		<AssemblyName>Gibraltar.DistributedLocking.Test</AssemblyName>
 		<Description>Unit tests for the Distributed Locking library</Description>
 		<Copyright>Copyright © 2008-2021 Gibraltar Software, Inc.</Copyright>
-		<Version>1.2.0.0</Version>
+		<Version>1.3.0.0</Version>
 	</PropertyGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\DistributedLocking\DistributedLocking.csproj" />
