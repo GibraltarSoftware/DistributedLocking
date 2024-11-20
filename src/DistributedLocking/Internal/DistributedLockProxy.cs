@@ -171,27 +171,26 @@ namespace Gibraltar.DistributedLocking.Internal
                 // Still not our turn?
                 if (ourTurn == false)
                 {
-                    if (!CommonCentralLogic.SilentMode)
+#if DEBUG
+                    // Who actually has the lock right now?
+                    lock(_currentLockLock)
                     {
-                        // Who actually has the lock right now?
-                        lock(_currentLockLock)
+                        if (_currentLockTurn != null)
                         {
-                            if (_currentLockTurn != null)
-                            {
-                                var currentOwningActivityId = _currentLockTurn.OwningLockId;
+                            var currentOwningActivityId = _currentLockTurn.OwningLockId;
 
-                                Trace.WriteLine(string.Format("{0}\r\nA lock request gave up because it is still being held by another thread.\r\n" +
-                                                              "Lock file: {1}\r\nCurrent holding Activity: {2}",
-                                    lockRequest.WaitForLock ? "Lock request timed out" : "Lock request couldn't wait",
-                                    _name, currentOwningActivityId));
-                            }
-                            else
-                            {
-                                Trace.TraceError("Lock request turn error\r\nA lock request failed to get its turn but the current lock turn is null.  " +
-                                                 "This probably should not happen.\r\nLock file: {0}\r\n", _name);
-                            }
+                            Trace.WriteLine(string.Format("{0}\r\nA lock request gave up because it is still being held by another thread.\r\n" +
+                                                            "Lock file: {1}\r\nCurrent holding Activity: {2}",
+                                lockRequest.WaitForLock ? "Lock request timed out" : "Lock request couldn't wait",
+                                _name, currentOwningActivityId));
+                        }
+                        else
+                        {
+                            Trace.TraceError("Lock request turn error\r\nA lock request failed to get its turn but the current lock turn is null.  " +
+                                                "This probably should not happen.\r\nLock file: {0}\r\n", _name);
                         }
                     }
+#endif
 
                     lockRequest.Dispose(); // Expire the request.
                     return false; // Failed to get the lock.  Time to give up.
@@ -220,21 +219,19 @@ namespace Gibraltar.DistributedLocking.Internal
             }
             else
             {
-                if (!CommonCentralLogic.SilentMode)
-                {
-                    Trace.WriteLine(string.Format("{0}\r\nA lock request gave up because it could not obtain the file lock.  " +
-                                                  "It is most likely still held by another process.\r\nLock file: {1}",
-                                                  lockRequest.WaitForLock ? "Lock request timed out" : "Lock request couldn't wait",
-                                                  _name));
-                }
-
+#if DEBUG
+                Trace.WriteLine(string.Format("{0}\r\nA lock request gave up because it could not obtain the file lock.  " +
+                                                "It is most likely still held by another process.\r\nLock file: {1}",
+                                                lockRequest.WaitForLock ? "Lock request timed out" : "Lock request couldn't wait",
+                                                _name));
+#endif
                 lockRequest.Dispose(); // Failed to get the lock.  Expire the request and give up.
             }
 
             return validLock;
         }
 
-        #endregion
+#endregion
 
         #region Private Properties and Methods
 

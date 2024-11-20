@@ -24,7 +24,10 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading;
 using Gibraltar.DistributedLocking.Internal;
+
+#if NETFRAMEWORK
 using Microsoft.Win32.SafeHandles;
+#endif
 
 namespace Gibraltar.DistributedLocking
 {
@@ -41,6 +44,7 @@ namespace Gibraltar.DistributedLocking
 
         private readonly string _path;
         private readonly bool _deleteOnClose;
+        private readonly bool _isWindows;
 
         /// <summary>
         /// Create a file lock provider scoped to the provided path.
@@ -52,6 +56,7 @@ namespace Gibraltar.DistributedLocking
             _path = path;
             Name = _path.ToLowerInvariant(); //to ensure comparability.
             _deleteOnClose = deleteOnClose;
+            _isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
         }
 
         /// <inheritdoc />
@@ -126,11 +131,11 @@ namespace Gibraltar.DistributedLocking
             var lockFullFileNamePath = GetLockFileName(_path, name);
 
             // We share ReadWrite so that we overlap with an open lock (unshared write) and other requests (open reads).
-            FileShare fileShare = FileShare.ReadWrite;
+            var fileShare = FileShare.ReadWrite;
 
-            if (CommonCentralLogic.IsMonoRuntime) // ...except on Mono that doesn't work properly.
+            if (_isWindows == false) // on some unix file systems FileShare isn't implemented fully so we have to use a different approach
             {
-                lockFullFileNamePath += "req"; // We must use a separate file for lock requests on Mono.
+                lockFullFileNamePath += "req"; 
                 fileShare = FileShare.Read; // Allow any other reads, but not writes.
             }
 
@@ -170,7 +175,7 @@ namespace Gibraltar.DistributedLocking
             FileShare fileShare = FileShare.Write;
             bool deleteOnClose = false; // This overlaps with holding a write lock, so don't delete the file when successful.
 
-            if (CommonCentralLogic.IsMonoRuntime) // ...except on Mono that doesn't work properly.
+            if (_isWindows == false) 
             {
                 lockFullFileNamePath += "req"; // We use a separate file for lock requests on Mono.
                 fileAccess = FileAccess.Write; // Writes would be blocked by a request sharing only other reads.
@@ -208,74 +213,33 @@ namespace Gibraltar.DistributedLocking
             uint flags = 0;
 
             FileLock fileOpen = null;
-            if (CommonCentralLogic.IsMonoRuntime)
+            FileStream fileStream = null;
+            try
             {
-                // We can't use P/Invoke, so create the file the direct .NET way.
-                FileStream fileStream = null;
+                RuntimeHelpers.PrepareConstrainedRegions(); // Make sure we don't thread-abort in the FileStream() ctor.
                 try
                 {
-                    RuntimeHelpers.PrepareConstrainedRegions(); // Make sure we don't thread-abort in the FileStream() ctor.
-                    try
-                    {
-                    }
-                    finally
-                    {
-                        fileStream = new FileStream(fullFileNamePath, FileMode.OpenOrCreate, fileAccess, fileShare,
-                                                    8192, (FileOptions)flags);
-                    }
                 }
-                catch (ThreadAbortException)
+                finally
                 {
-                    if (fileStream != null)
-                        fileStream.Dispose(); // Make sure this gets cleaned up if the requesting thread is aborting!
-
-                    throw; // Does this help preserve stack trace info?
+                    fileStream = new FileStream(fullFileNamePath, FileMode.OpenOrCreate, fileAccess, fileShare,
+                                                8192, (FileOptions)flags);
                 }
-                catch
-                {
-                    fileStream = null;
-                }
-
+            }
+            catch (ThreadAbortException)
+            {
                 if (fileStream != null)
-                    fileOpen = new FileLock(fileStream, fullFileNamePath, FileMode.OpenOrCreate, fileAccess, fileShare, manualDeleteOnClose);
+                    fileStream.Dispose(); // Make sure this gets cleaned up if the requesting thread is aborting!
+
+                throw; // Does this help preserve stack trace info?
             }
-            else
+            catch
             {
-                SafeFileHandle fileHandle = null;
-                try
-                {
-                    RuntimeHelpers.PrepareConstrainedRegions(); // Make sure we don't thread-abort in the CreateFile() call.
-                    try
-                    {
-                    }
-                    finally
-                    {
-                        // We can use P/Invoke to avoid having to catch an exception for failure.
-                        fileHandle = Win32Helper.CreateFile(fullFileNamePath, fileAccess, fileShare,
-                                                            IntPtr.Zero, FileMode.OpenOrCreate, flags, IntPtr.Zero);
-                    }
-
-                    if (fileHandle != null && (fileHandle.IsInvalid || fileHandle.IsClosed))
-                    {
-                        // We couldn't open it properly, so we don't need the file handle.
-                        fileHandle.Dispose(); // just so we're absolutely clear.
-
-                        fileHandle = null;
-                    }
-
-                    if (fileHandle != null)
-                        fileOpen = new FileLock(fileHandle, fullFileNamePath, FileMode.OpenOrCreate, fileAccess, fileShare, manualDeleteOnClose);
-                }
-                catch (ThreadAbortException)
-                {
-                    if (fileOpen != null)
-                        fileOpen.Dispose(); // This will also dispose the fileHandle for us.
-                    else if (fileHandle != null)
-                        fileHandle.Dispose(); // Make sure this gets cleaned up if the requesting thread is aborting!
-
-                    throw; // Does this help preserve stack trace info?
-                }
+                fileStream = null;
             }
+
+            if (fileStream != null)
+                fileOpen = new FileLock(fileStream, fullFileNamePath, FileMode.OpenOrCreate, fileAccess, fileShare, manualDeleteOnClose);
 
             return fileOpen;
         }

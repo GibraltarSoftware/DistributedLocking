@@ -55,9 +55,6 @@ namespace Gibraltar.DistributedLocking.Internal
             }
             catch (Exception ex)
             {
-#if DEBUG
-                CommonCentralLogic.DebugBreak();
-#endif
                 GC.KeepAlive(ex);
 
                 return sqlException.Message;

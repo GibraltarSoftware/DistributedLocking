@@ -33,6 +33,7 @@ namespace Gibraltar.DistributedLocking.Internal
         private readonly FileShare _fileShare;
         private readonly FileAccess _fileAccess;
         private readonly bool _deleteOnClose;
+        private readonly bool _isWindows;
 
         private readonly SafeFileHandle _fileHandle;
         private FileStream _fileStream;
@@ -45,6 +46,7 @@ namespace Gibraltar.DistributedLocking.Internal
             _fileShare = fileShare;
             _fileAccess = fileAccess;
             _deleteOnClose = manualDeleteOnClose;
+            _isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
         }
 
         internal FileLock(SafeFileHandle fileHandle, string fileName, FileMode creationMode, FileAccess fileAccess, FileShare fileShare, bool manualDeleteOnClose)
@@ -91,10 +93,10 @@ namespace Gibraltar.DistributedLocking.Internal
         /// </summary>
         public void Dispose()
         {
-            if (_deleteOnClose && CommonCentralLogic.IsMonoRuntime)
+            if (_deleteOnClose && _isWindows == false)
             {
-                // For Mono, delete it while we still have it open (exclusively) to avoid a race condition.
-                Win32Helper.SafeDeleteFile(_fileName); // Opens don't stop deletes!
+                // For unix, delete it while we still have it open (exclusively) to avoid a race condition.
+                SafeDeleteFile(_fileName); // Opens don't stop deletes!
             }
 
             if (_haveStream)
@@ -106,11 +108,32 @@ namespace Gibraltar.DistributedLocking.Internal
             _fileStream = null;
 
             //and now we try to delete it if we were supposed to.
-            if (_deleteOnClose && CommonCentralLogic.IsMonoRuntime == false)
+            if (_deleteOnClose && _isWindows)
             {
-                // Not Mono, we can only delete it after we have closed it.
-                Win32Helper.SafeDeleteFile(_fileName); // Delete will fail if anyone else has it open.  That's okay.
+                // On Windows - we can only delete it after we close it
+                SafeDeleteFile(_fileName); // Delete will fail if anyone else has it open.  That's okay.
             }
+        }
+
+
+        /// <summary>
+        /// Delete a file with no exception being thrown. Uses DeleteFile method if not running under Mono.
+        /// </summary>
+        /// <param name="fileName"></param>
+        /// <returns></returns>
+        private static bool SafeDeleteFile(string fileName)
+        {
+            bool fileDeleted = false;
+            try
+            {
+                File.Delete(fileName);
+                fileDeleted = true; //same difference...
+            }
+            catch (Exception)
+            {
+            }
+
+            return fileDeleted;
         }
     }
 }

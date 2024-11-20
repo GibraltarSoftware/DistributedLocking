@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFrameworks>net46;net461;net462;netcoreapp31;net50</TargetFrameworks>
+		<TargetFrameworks>net46;net461;net462;net60;net80</TargetFrameworks>
 		<OutputType>Library</OutputType>
 		<RootNamespace>Gibraltar.DistributedLocking.Test</RootNamespace>
 		<AssemblyName>Gibraltar.DistributedLocking.Test</AssemblyName>
 		<Description>Unit tests for the Distributed Locking library</Description>
-		<Copyright>Copyright © 2008-2021 Gibraltar Software, Inc.</Copyright>
+		<Copyright>Copyright © 2008-2024 Gibraltar Software, Inc.</Copyright>
 		<Version>1.3.0.0</Version>
 	</PropertyGroup>
 	<ItemGroup>
@@ -21,12 +21,13 @@
 		</When>
 		<Otherwise>
 			<ItemGroup>
-				<PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
+				<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
 			</ItemGroup>
 		</Otherwise>
 	</Choose>
 	<ItemGroup>
-		<PackageReference Include="NUnit" Version="3.13.2" />
-		<PackageReference Include="NUnit3TestAdapter" Version="4.0.0" />
+		<PackageReference Include="NUnit" Version="3.14.0" />
+		<PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+		<PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
 	</ItemGroup>
 </Project>

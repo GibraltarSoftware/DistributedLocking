@@ -28,11 +28,15 @@ namespace Gibraltar.DistributedLocking.Test
     [TestFixture]
     public class When_Using_Sql_Locks
     {
-#if NETCOREAPP
-        private const string ConnectionStringTemplate = "Data Source=tcp:{0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;User Id=sa;Password=f4rd+GM%";
-#else
+        private const string SqlServerDnsName = "KENDALLHOME"; // Put the DNS name of the SQL Server you want to use for testing here.
+        private const string SqlServerUserId = "sa"; // Put the SQL user you want to use for testing here.  Has to be a real SQL user in the database.
+        private const string SqlServerUserPassword = "fr0Gd3sign"; // Put the password for the sql user here.
+
+#if NETFRAMEWORK
         private const string ConnectionStringTemplate = "Data Source={0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;" +
-                                                        "Network Library=dbmssocn;User Id=sa;Password=f4rd+GM%";
+                                                        "Network Library=dbmssocn;User Id={2};Password={3}";
+#else
+        private const string ConnectionStringTemplate = "Data Source=tcp:{0};Initial Catalog={1};Integrated Security=False;MultipleActiveResultSets=True;User Id={2};Password={3}";
 #endif
         private const string MultiprocessLockName = "LockRepository";
         private const string DefaultLockDatabase = "lock_test";
@@ -288,7 +292,7 @@ namespace Gibraltar.DistributedLocking.Test
 
         private SqlLockProvider GetLockProvider(string databaseName)
         {
-            var connectionString = string.Format(ConnectionStringTemplate, "192.168.1.73", databaseName);
+            var connectionString = string.Format(ConnectionStringTemplate, SqlServerDnsName, databaseName, SqlServerUserId, SqlServerUserPassword);
 
             return new SqlLockProvider(connectionString);
         }

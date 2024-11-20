@@ -325,20 +325,22 @@ namespace Gibraltar.DistributedLocking.Internal
             //the order we check these sets our priority of handling them.
             if (isDeadlockError)
             {
-                if (!CommonCentralLogic.SilentMode)
-                    Trace.TraceWarning("Retryable Sql Server Exception detected (deadlock))\r\nWhile performing a database call a deadlock error was detected.  We'll retry the operation.\r\nCommand: {0}\r\nConnection: {1}\r\nException: {2}", command.CommandText, command.Connection.ToMessage(), ex.Message);
-
+#if DEBUG
+                Trace.TraceWarning("Retryable Sql Server Exception detected (deadlock))\r\nWhile performing a database call a deadlock error was detected.  We'll retry the operation.\r\nCommand: {0}\r\nConnection: {1}\r\nException: {2}", command.CommandText, command.Connection.ToMessage(), ex.Message);
+#endif
                 Thread.Sleep(DeadlockRetryDelay * 1000);
             }
             else if (isConnectionError)
             {
-                if (!CommonCentralLogic.SilentMode)
-                    Trace.TraceWarning("Retryable Sql Server Exception detected (connectivity error)\r\nWhile performing a database call a transient connection error was detected.  We'll retry the operation.\r\nCommand: {0}\r\nConnection: {1}\r\nException: {2}", command.CommandText, command.Connection.ToMessage(), ex.Message);
+#if DEBUG
+                Trace.TraceWarning("Retryable Sql Server Exception detected (connectivity error)\r\nWhile performing a database call a transient connection error was detected.  We'll retry the operation.\r\nCommand: {0}\r\nConnection: {1}\r\nException: {2}", command.CommandText, command.Connection.ToMessage(), ex.Message);
+#endif
             }
             else if (isTimeoutError)
             {
-                if (!CommonCentralLogic.SilentMode)
-                    Trace.TraceWarning("Retryable Sql Server Exception detected (timeout)\r\nWhile performing a database call a timeout error was detected.  We'll retry the operation.\r\nCommand: {0}\r\nTimeout: {1:N0}\r\nConnection: {2}\r\nException: {3}", command.CommandText, command.CommandTimeout, command.Connection.ToMessage(), ex.Message);
+#if DEBUG
+                Trace.TraceWarning("Retryable Sql Server Exception detected (timeout)\r\nWhile performing a database call a timeout error was detected.  We'll retry the operation.\r\nCommand: {0}\r\nTimeout: {1:N0}\r\nConnection: {2}\r\nException: {3}", command.CommandText, command.CommandTimeout, command.Connection.ToMessage(), ex.Message);
+#endif
             }
             else
             {
