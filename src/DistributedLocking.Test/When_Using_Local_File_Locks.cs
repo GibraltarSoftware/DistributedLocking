@@ -1,7 +1,7 @@
 ﻿#region File Header and License
 // /*
 //    When_Using_Local_File_Locks.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 
 namespace Gibraltar.DistributedLocking.Test
@@ -30,11 +31,14 @@ namespace Gibraltar.DistributedLocking.Test
     {
         const string MultiprocessLockName = "LockRepository";
 
+        private readonly ILogger<FileLockProvider> _fileLogger = NUnitLogger.Create<FileLockProvider>();
+        private readonly ILogger<DistributedLockManager> _lockLogger = NUnitLogger.Create<DistributedLockManager>();
+
         [Test]
         public void Can_Acquire_Lock()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -54,7 +58,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Acquire_Lock_With_Integer_Timeout()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -74,7 +78,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Acquire_Lock_With_CancellationToken()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -95,7 +99,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Timeout_Lock_Using_CancellationToken()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -119,7 +123,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Acquire_Lock_With_Unsafe_Name()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -141,7 +145,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Not_Acquire_Same_Lock_On_Another_Thread()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -164,7 +168,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_ReEnter_Lock_On_Same_Thread()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -196,7 +200,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Not_Acquire_Same_Lock_In_Same_Scope()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -226,7 +230,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Acquire_Different_Lock_In_Same_Scope()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             try
             {
@@ -256,7 +260,7 @@ namespace Gibraltar.DistributedLocking.Test
             var thirdTestRepositoryPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
             var fourthTestRepositoryPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
 
-            var firstLockManager = new DistributedLockManager(new FileLockProvider(firstTestRepositoryPath));
+            var firstLockManager = new DistributedLockManager(new FileLockProvider(firstTestRepositoryPath, _fileLogger), _lockLogger);
 
             try
             {
@@ -265,17 +269,17 @@ namespace Gibraltar.DistributedLocking.Test
                 {
                     Assert.IsNotNull(testLock, "Unable to establish lock on first scope");
 
-                    var secondLockManager = new DistributedLockManager(new FileLockProvider(secondTestRepositoryPath));
+                    var secondLockManager = new DistributedLockManager(new FileLockProvider(secondTestRepositoryPath, _fileLogger), _lockLogger);
                     using (var secondTestLock = secondLockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(secondTestLock, "Unable to establish lock on second scope.");
 
-                        var thirdLockManager = new DistributedLockManager(new FileLockProvider(thirdTestRepositoryPath));
+                        var thirdLockManager = new DistributedLockManager(new FileLockProvider(thirdTestRepositoryPath, _fileLogger), _lockLogger);
                         using (var thirdTestLock = thirdLockManager.Lock(this, MultiprocessLockName))
                         {
                             Assert.IsNotNull(thirdTestLock, "Unable to establish lock on third scope.");
 
-                            var forthLockManager = new DistributedLockManager(new FileLockProvider(fourthTestRepositoryPath));
+                            var forthLockManager = new DistributedLockManager(new FileLockProvider(fourthTestRepositoryPath, _fileLogger), _lockLogger);
                             using (var fourthTestLock = forthLockManager.Lock(this, MultiprocessLockName))
                             {
                                 Assert.IsNotNull(fourthTestLock, "Unable to establish lock on fourth scope.");
@@ -310,7 +314,7 @@ namespace Gibraltar.DistributedLocking.Test
 
             try
             {
-                var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+                var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
                 using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
                 {
@@ -344,7 +348,7 @@ namespace Gibraltar.DistributedLocking.Test
         public void Can_Acquire_Lock_Many_Times()
         {
             var lockScopePath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath));
+            var lockManager = new DistributedLockManager(new FileLockProvider(lockScopePath, _fileLogger), _lockLogger);
 
             var lockIterations = 1000;
             try

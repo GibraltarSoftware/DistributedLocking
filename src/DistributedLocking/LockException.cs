@@ -1,7 +1,6 @@
-﻿#region File Header and License
-// /*
+﻿// /*
 //    LockException.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -15,7 +14,6 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 // */
-#endregion
 
 using System;
 using System.Diagnostics;
@@ -28,7 +26,6 @@ namespace Gibraltar.DistributedLocking
     [Serializable]
     public class LockException : Exception
     {
-        #region Debugging assistance
         /// <summary>
         /// A temporary flag to tell us whether to invoke a Debugger.Break() on all of our exceptions.
         /// </summary>
@@ -55,7 +52,6 @@ namespace Gibraltar.DistributedLocking
                 // ...hopefully to the point just before it gets thrown.
             }
         }
-        #endregion
 
         /// <summary>
         /// Initializes a new instance of the GibraltarException class.

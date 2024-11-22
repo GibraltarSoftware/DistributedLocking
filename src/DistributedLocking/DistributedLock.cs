@@ -1,7 +1,6 @@
-﻿#region File Header and License
-// /*
+﻿// /*
 //    DistributedLock.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -15,7 +14,6 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 // */
-#endregion
 
 using System;
 using System.Threading;
@@ -54,8 +52,6 @@ namespace Gibraltar.DistributedLocking
             _myTurn = false;
             _cancellation = token;
         }
-
-        #region Public Properties and Methods
 
         ///<summary>
         ///Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
@@ -156,10 +152,6 @@ namespace Gibraltar.DistributedLocking
             }
         }
 
-        #endregion
-
-        #region Internal Properties and Methods
-
         /// <summary>
         /// The proxy who will actually hold the file lock on our behalf.
         /// </summary>
@@ -235,10 +227,6 @@ namespace Gibraltar.DistributedLocking
             }
         }
 
-        #endregion
-
-        #region Private Properties and Methods
-
         /// <summary>
         /// Performs the actual releasing of managed and unmanaged resources.
         /// Most usage should instead call Dispose(), which will call Dispose(true) for you
@@ -274,10 +262,8 @@ namespace Gibraltar.DistributedLocking
 
             if (tempEvent != null)
             {
-                tempEvent.Invoke(this, new EventArgs());
+                tempEvent.Invoke(this, EventArgs.Empty);
             }
         }
-
-        #endregion
     }
 }

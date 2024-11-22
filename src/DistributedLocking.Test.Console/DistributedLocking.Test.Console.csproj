@@ -1,18 +1,30 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFrameworks>net46;net461;net462;</TargetFrameworks>
-    <OutputType>Exe</OutputType>
-    <RootNamespace>Gibraltar.DistributedLocking.Test.Console</RootNamespace>
-    <AssemblyName>DistributedLocking</AssemblyName>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="System.Configuration" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\DistributedLocking\DistributedLocking.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
-  </ItemGroup>
+	<PropertyGroup>
+		<TargetFrameworks>net461;net462;net60;net80</TargetFrameworks>
+		<OutputType>Exe</OutputType>
+		<RootNamespace>Gibraltar.DistributedLocking.Test.Console</RootNamespace>
+		<AssemblyName>DistributedLocking</AssemblyName>
+		<LangVersion>11</LangVersion>
+	</PropertyGroup>
+	<Choose>
+		<When Condition="'$(TargetFramework)' == 'net461' Or '$(TargetFramework)' == 'net462' Or '$(TargetFramework)' == 'net46'">
+			<ItemGroup>
+				<Reference Include="System.Configuration" />
+				<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="3.0.0" />
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<PackageReference Include="System.Configuration.ConfigurationManager" Version="6.0.0" />
+				<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="6.0.0" />
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
+	<ItemGroup>
+		<ProjectReference Include="..\DistributedLocking\DistributedLocking.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+		<PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
+	</ItemGroup>
 </Project>

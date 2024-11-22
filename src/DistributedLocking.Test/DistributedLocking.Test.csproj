@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFrameworks>net46;net461;net462;net60;net80</TargetFrameworks>
+		<TargetFrameworks>net461;net462;net60;net80</TargetFrameworks>
 		<OutputType>Library</OutputType>
 		<RootNamespace>Gibraltar.DistributedLocking.Test</RootNamespace>
 		<AssemblyName>Gibraltar.DistributedLocking.Test</AssemblyName>

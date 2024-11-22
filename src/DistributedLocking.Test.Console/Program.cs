@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Configuration;
-using System.Security.Cryptography;
 using System.Threading;
+using Microsoft.Extensions.Logging;
 
 namespace Gibraltar.DistributedLocking.Test.Console
 {
@@ -9,20 +9,31 @@ namespace Gibraltar.DistributedLocking.Test.Console
     {
         static void Main(string[] args)
         {
+            using var loggerFactory = LoggerFactory.Create(builder =>
+                                                           {
+                                                               builder.AddConsole();
+#if DEBUG
+                                                               builder.SetMinimumLevel(LogLevel.Debug);
+#else
+                                                               builder.SetMinimumLevel(LogLevel.Information);
+#endif
+
+                                                           });
+
+            var logger = loggerFactory.CreateLogger<Program>();
+
             var configuredConnectionString = ConfigurationManager.ConnectionStrings["LockManager"];
 
             if (configuredConnectionString == null)
             {
-                System.Console.WriteLine("No connection string configured named 'LockManager'");
+                logger.LogError("No connection string configured named 'LockManager'");
                 return;
             }
 
-            var lockProvider = new SqlLockProvider(configuredConnectionString.ConnectionString);
-            var lockManager = new DistributedLockManager(lockProvider);
+            var lockProvider = new SqlLockProvider(configuredConnectionString.ConnectionString, loggerFactory.CreateLogger<SqlLockProvider>());
+            var lockManager = new DistributedLockManager(lockProvider, loggerFactory.CreateLogger<DistributedLockManager>());
 
-            System.Console.WriteLine("Configuring Test");
-
-            var rng = new RNGCryptoServiceProvider();
+            logger.LogInformation("Configuring Test");
 
             int tasks = 100;
             bool highContention = false;
@@ -44,15 +55,16 @@ namespace Gibraltar.DistributedLocking.Test.Console
                 maxLockNumber = tasks * 5;
             }
 
-            var lockingClient = new LockingClient(lockManager, rng, maxLockDuration, lockTimeout, "Session~d9a84ccf-9bef-4777-b202-a4343d35089a", maxLockNumber);
+            var lockingClient = new LockingClient(lockManager, maxLockDuration, lockTimeout, 
+                "Session~d9a84ccf-9bef-4777-b202-a4343d35089a", maxLockNumber, loggerFactory.CreateLogger<LockingClient>());
 
             try
             {
                 lockingClient.Start(tasks);
-                System.Console.WriteLine("Running Lock Test, press any key to exit");
+                logger.LogInformation("Running Lock Test, press any key to exit");
                 System.Console.ReadKey(true);
 
-                System.Console.WriteLine("Shutting down lock test");
+                logger.LogInformation("Shutting down lock test");
             }
             catch (Exception ex)
             {
@@ -62,7 +74,7 @@ namespace Gibraltar.DistributedLocking.Test.Console
             {
                 lockingClient.Stop();
                 Thread.Sleep(new TimeSpan(0, 0, 10));
-                System.Console.WriteLine("Exiting Lock Test");                
+                logger.LogInformation("Exiting Lock Test");
             }
         }
     }

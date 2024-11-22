@@ -1,7 +1,7 @@
 ﻿#region File Header and License
 // /*
 //    When_Using_Sql_Locks.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 
 namespace Gibraltar.DistributedLocking.Test
@@ -43,10 +44,13 @@ namespace Gibraltar.DistributedLocking.Test
         private const string SecondLockDatabase = "tempdb";
         private const string ThirdLockDatabase = "master";
 
+        private readonly ILogger<SqlLockProvider> _sqlLogger = NUnitLogger.Create<SqlLockProvider>();
+        private readonly ILogger<DistributedLockManager> _lockLogger = NUnitLogger.Create<DistributedLockManager>();
+
         [Test]
         public void Can_Acquire_Lock()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
             {
@@ -57,7 +61,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Acquire_Lock_With_Integer_Timeout()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             using (var outerLock = lockManager.Lock(this, MultiprocessLockName, 1))
             {
@@ -68,7 +72,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Acquire_Lock_With_CancellationToken()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             var tokenSource = new CancellationTokenSource(1000);
             using (var outerLock = lockManager.Lock(this, MultiprocessLockName, tokenSource.Token))
@@ -80,7 +84,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Timeout_Lock_Using_CancellationToken()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
             {
@@ -95,7 +99,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Acquire_Lock_With_Unsafe_Name()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             var unsafeLockName = "\"M<>\"\\a/ry/ h**ad:>> a\\/:*?\"<>| li*tt|le|| la\"mb.?";
 
@@ -108,7 +112,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Not_Acquire_Same_Lock_On_Another_Thread()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
             {
@@ -124,7 +128,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_ReEnter_Lock_On_Same_Thread()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             // First test new re-entrant lock capability.
             using (var outerLock = lockManager.Lock(this, MultiprocessLockName))
@@ -147,7 +151,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Not_Acquire_Same_Lock_In_Same_Scope()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             // Now test other scenarios while another thread holds the lock.
             using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
@@ -168,7 +172,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Acquire_Different_Lock_In_Same_Scope()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             // Now test other scenarios while another thread holds the lock.
             using (var otherLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName + "_alternate"))
@@ -185,19 +189,19 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Acquire_Same_Lock_In_Different_Scope()
         {
-            var firstLockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var firstLockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             // Now test other scenarios while another thread holds the lock.
             using (var testLock = firstLockManager.Lock(this, MultiprocessLockName))
             {
                 Assert.IsNotNull(testLock, "Unable to establish lock on first scope");
 
-                var secondLockManager = new DistributedLockManager(GetLockProvider(SecondLockDatabase));
+                var secondLockManager = new DistributedLockManager(GetLockProvider(SecondLockDatabase), _lockLogger);
                 using (var secondTestLock = secondLockManager.Lock(this, MultiprocessLockName))
                 {
                     Assert.IsNotNull(secondTestLock, "Unable to establish lock on second scope.");
 
-                    var thirdLockManager = new DistributedLockManager(GetLockProvider(ThirdLockDatabase));
+                    var thirdLockManager = new DistributedLockManager(GetLockProvider(ThirdLockDatabase), _lockLogger);
                     using (var thirdTestLock = thirdLockManager.Lock(this, MultiprocessLockName))
                     {
                         Assert.IsNotNull(thirdTestLock, "Unable to establish lock on third scope.");
@@ -209,7 +213,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void LockRepositoryTimeout()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             using (var testLock = OtherThreadLockHelper.TryLock(this, lockManager, MultiprocessLockName))
             {
@@ -236,7 +240,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public void Can_Acquire_Lock_Many_Times()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             var lockIterations = 1000;
 
@@ -252,7 +256,7 @@ namespace Gibraltar.DistributedLocking.Test
         [Test]
         public async Task Can_Acquire_Lock_Many_Times_Async()
         {
-            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase));
+            var lockManager = new DistributedLockManager(GetLockProvider(DefaultLockDatabase), _lockLogger);
 
             var lockIterations = 1000;
 
@@ -294,7 +298,7 @@ namespace Gibraltar.DistributedLocking.Test
         {
             var connectionString = string.Format(ConnectionStringTemplate, SqlServerDnsName, databaseName, SqlServerUserId, SqlServerUserPassword);
 
-            return new SqlLockProvider(connectionString);
+            return new SqlLockProvider(connectionString, _sqlLogger);
         }
     }
 }

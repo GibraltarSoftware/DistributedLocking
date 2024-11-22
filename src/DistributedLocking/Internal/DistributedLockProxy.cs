@@ -1,7 +1,6 @@
-#region File Header and License
 // /*
 //    DistributedLockProxy.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -15,7 +14,6 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 // */
-#endregion
 
 using System;
 using System.Collections.Concurrent;
@@ -56,8 +54,6 @@ namespace Gibraltar.DistributedLocking.Internal
             _name = name;
         }
 
-        #region Public Properties and Methods
-
         ///<summary>
         ///Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
         ///</summary>
@@ -86,10 +82,6 @@ namespace Gibraltar.DistributedLocking.Internal
         /// (Reports -1 if the proxy is idle (no current turn).)
         /// </summary>
         public int WaitingCount => (_currentLockTurn == null) ? -1 : _waitQueue.Count;
-
-        #endregion
-
-        #region Internal Properties and Methods
 
         /// <summary>
         /// Object persistence policy for this instance:  Whether to dispose this instance when file lock is released.
@@ -230,10 +222,6 @@ namespace Gibraltar.DistributedLocking.Internal
 
             return validLock;
         }
-
-#endregion
-
-        #region Private Properties and Methods
 
         /// <summary>
         /// Try to get the actual file lock on behalf of the current request.
@@ -480,8 +468,5 @@ namespace Gibraltar.DistributedLocking.Internal
                 }
             }
         }
-
-        #endregion
-
     }
 }

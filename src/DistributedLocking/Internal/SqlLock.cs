@@ -1,7 +1,6 @@
-﻿#region File Header and License
-// /*
+﻿// /*
 //    SqlLock.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -15,7 +14,6 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 // */
-#endregion
 
 using System;
 using System.Data;

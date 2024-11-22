@@ -1,7 +1,6 @@
-﻿#region File Header and License
-// /*
+﻿// /*
 //    FileLock.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -15,11 +14,13 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 // */
-#endregion
 
 using System;
 using System.IO;
-using Microsoft.Win32.SafeHandles;
+
+#if NETSTANDARD || NET6_0_OR_GREATER
+using System.Runtime.InteropServices;
+#endif
 
 namespace Gibraltar.DistributedLocking.Internal
 {
@@ -35,7 +36,7 @@ namespace Gibraltar.DistributedLocking.Internal
         private readonly bool _deleteOnClose;
         private readonly bool _isWindows;
 
-        private readonly SafeFileHandle _fileHandle;
+        //private readonly SafeFileHandle _fileHandle;
         private FileStream _fileStream;
         private bool _haveStream;
 
@@ -46,46 +47,18 @@ namespace Gibraltar.DistributedLocking.Internal
             _fileShare = fileShare;
             _fileAccess = fileAccess;
             _deleteOnClose = manualDeleteOnClose;
+#if NETFRAMEWORK
             _isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
-        }
-
-        internal FileLock(SafeFileHandle fileHandle, string fileName, FileMode creationMode, FileAccess fileAccess, FileShare fileShare, bool manualDeleteOnClose)
-            : this(fileName, creationMode, fileAccess, fileShare, manualDeleteOnClose)
-        {
-            _fileHandle = fileHandle;
-            _fileStream = null;
-            _haveStream = false;
+#else
+            _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+#endif
         }
 
         internal FileLock(FileStream fileStream, string fileName, FileMode creationMode, FileAccess fileAccess, FileShare fileShare, bool manualDeleteOnClose)
             : this(fileName, creationMode, fileAccess, fileShare, manualDeleteOnClose)
         {
-            _fileHandle = null;
             _fileStream = fileStream;
             _haveStream = (_fileStream != null);
-        }
-
-        /// <summary>
-        /// Get the FileStream for this lock instance.
-        /// </summary>
-        /// <returns></returns>
-        public FileStream GetFileStream()
-        {
-            if (_haveStream == false && _fileHandle != null &&
-                _fileHandle.IsInvalid == false && _fileHandle.IsClosed == false)
-            {
-                try
-                {
-                    _fileStream = new FileStream(_fileHandle, _fileAccess);
-                    _haveStream = true;
-                }
-                catch (Exception ex)
-                {
-                    GC.KeepAlive(ex);
-                }
-            }
-
-            return _fileStream;
         }
 
         /// <summary>
@@ -101,8 +74,6 @@ namespace Gibraltar.DistributedLocking.Internal
 
             if (_haveStream)
                 _fileStream.Dispose();
-            else if ((_fileHandle != null) && (!_fileHandle.IsClosed) && (!_fileHandle.IsInvalid)) //this is a punt to solve a MONO crash.
-                _fileHandle.Dispose();
 
             _haveStream = false;
             _fileStream = null;

@@ -1,7 +1,6 @@
-﻿#region File Header and License
-// /*
+﻿// /*
 //    FileLockProvider.cs
-//    Copyright 2008-2017 Gibraltar Software, Inc.
+//    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -15,18 +14,18 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 // */
-#endregion
 
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
 using System.Threading;
 using Gibraltar.DistributedLocking.Internal;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
-#if NETFRAMEWORK
-using Microsoft.Win32.SafeHandles;
+#if NETSTANDARD || NET6_0_OR_GREATER
+using System.Runtime.InteropServices;
 #endif
 
 namespace Gibraltar.DistributedLocking
@@ -44,19 +43,51 @@ namespace Gibraltar.DistributedLocking
 
         private readonly string _path;
         private readonly bool _deleteOnClose;
+        private readonly ILogger<FileLockProvider> _logger;
         private readonly bool _isWindows;
 
         /// <summary>
         /// Create a file lock provider scoped to the provided path.
         /// </summary>
-        /// <param name="path">The network path which determines the scope of locks</param>
+        /// <param name="path">The file system path which determines the scope of locks</param>
         /// <param name="deleteOnClose">True to clean up (delete) lock files as they are closed.</param>
+        /// <remarks>It's recommended to use deleteOnClose = true so lock files are automatically cleaned up.  Set to false
+        /// in scenarios where file system permissions are highly restricted and the lock files have been pre-created (and can't be deleted).</remarks>
         public FileLockProvider(string path, bool deleteOnClose = true)
+            :this(path, deleteOnClose, NullLoggerFactory.Instance.CreateLogger<FileLockProvider>())
+        {
+        }
+
+        /// <summary>
+        /// Create a file lock provider scoped to the provided path.
+        /// </summary>
+        /// <param name="path">The file system path which determines the scope of locks</param>
+        /// <param name="logger">Logger to use for diagnostics</param>
+        /// <remarks>The lock provider will clean up (delete) lock files as they are closed.</remarks>
+        public FileLockProvider(string path, ILogger<FileLockProvider> logger)
+            :this(path, true, logger)
+        {
+        }
+
+        /// <summary>
+        /// Create a file lock provider scoped to the provided path.
+        /// </summary>
+        /// <param name="path">The file system path which determines the scope of locks</param>
+        /// <param name="deleteOnClose">True to clean up (delete) lock files as they are closed.</param>
+        /// <param name="logger">Logger to use for diagnostics</param>
+        /// <remarks>It's recommended to use deleteOnClose = true so lock files are automatically cleaned up.  Set to false
+        /// in scenarios where file system permissions are highly restricted and the lock files have been pre-created (and can't be deleted).</remarks>
+        public FileLockProvider(string path, bool deleteOnClose, ILogger<FileLockProvider> logger)
         {
             _path = path;
             Name = _path.ToLowerInvariant(); //to ensure comparability.
             _deleteOnClose = deleteOnClose;
+            _logger = logger;
+#if NETFRAMEWORK
             _isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+#else
+            _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+#endif
         }
 
         /// <inheritdoc />
@@ -71,20 +102,11 @@ namespace Gibraltar.DistributedLocking
             {
                 Directory.CreateDirectory(_path);
             }
-            catch (UnauthorizedAccessException ex)
-            {
-                GC.KeepAlive(ex);
-#if DEBUG
-                Trace.TraceWarning("Unable to create directory to index path, locking will not be feasible.  Exception: {0}", ex);
-#endif
-                throw; // we aren't going to try to spinlock on this.. we failed.
-            }
             catch (Exception ex)
             {
-                GC.KeepAlive(ex);
-#if DEBUG
-                Trace.TraceWarning("Unable to create directory to index path, locking will not be feasible.  Exception: {0}", ex);
-#endif
+                _logger.LogError(ex, "Unable to create directories in lock path, locking will not be feasible.\r\nPath: {Path}\r\nException: {Exception.Name}",
+                    _path, ex.GetBaseException().GetType().Name);
+                return null;
             }
 
             var lockFullFileNamePath = GetLockFileName(_path, name);
@@ -122,10 +144,9 @@ namespace Gibraltar.DistributedLocking
             }
             catch (Exception ex)
             {
-                GC.KeepAlive(ex);
-#if DEBUG
-                Trace.TraceWarning("Unable to create directory to index path, locking will not be feasible.  Exception: {0}", ex);
-#endif
+                _logger.LogError(ex, "Unable to create directories in lock path, locking will not be feasible.\r\nPath: {Path}\r\nException: {Exception.Name}",
+                    _path, ex.GetBaseException().GetType().Name);
+                return null;
             }
 
             var lockFullFileNamePath = GetLockFileName(_path, name);
@@ -162,10 +183,9 @@ namespace Gibraltar.DistributedLocking
             }
             catch (Exception ex)
             {
-                GC.KeepAlive(ex);
-#if DEBUG
-                Trace.TraceWarning("Unable to create directory to index path, locking will not be feasible.  Exception: {0}", ex);
-#endif
+                _logger.LogError(ex, "Unable to create directories in lock path, locking will not be feasible.\r\nPath: {Path}\r\nException: {Exception.Name}",
+                    _path, ex.GetBaseException().GetType().Name);
+                return false;
             }
 
             var lockFullFileNamePath = GetLockFileName(_path, name);

@@ -1,5 +1,4 @@
-﻿#region File Header and License
-// /*
+﻿// /*
 //    DistributedLockManager.cs
 //    Copyright 2008-2024 Gibraltar Software, Inc.
 //    
@@ -15,14 +14,13 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 // */
-#endregion
 
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading;
 using Gibraltar.DistributedLocking.Internal;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Gibraltar.DistributedLocking
 {
@@ -35,16 +33,28 @@ namespace Gibraltar.DistributedLocking
     {
         private readonly IDistributedLockProvider _provider;
         private readonly ConcurrentDictionary<string, DistributedLockProxy> _proxies = new ConcurrentDictionary<string, DistributedLockProxy>(StringComparer.OrdinalIgnoreCase);
+        private readonly ILogger<DistributedLockManager> _logger;
 
         private static readonly AsyncLocal<Guid?> LocalContext = new AsyncLocal<Guid?>();
 
         /// <summary>
         /// Create a new distributed lock manager, denoting a scope of locks.
         /// </summary>
-        /// <param name="provider"></param>
+        /// <param name="provider">The <seealso cref="IDistributedLockProvider"/> for the locks</param>
         public DistributedLockManager(IDistributedLockProvider provider)
+            : this(provider, NullLoggerFactory.Instance.CreateLogger<DistributedLockManager>()) 
+        {
+        }
+
+        /// <summary>
+        /// Create a new distributed lock manager, denoting a scope of locks.
+        /// </summary>
+        /// <param name="provider">The <seealso cref="IDistributedLockProvider"/> for the locks</param>
+        /// <param name="logger">Logger to use for diagnostics</param>
+        public DistributedLockManager(IDistributedLockProvider provider, ILogger<DistributedLockManager> logger)
         {
             _provider = provider;
+            _logger = logger;
         }
 
         /// <summary>
@@ -81,8 +91,8 @@ namespace Gibraltar.DistributedLocking
             
             var waitDuration = DateTime.UtcNow - requestStartTime;
 
-            var message = (token == CancellationToken.None) ? string.Format("Unable to acquire lock {0} immediately", name)
-            : string.Format("Unable to acquire lock {0} within {1}", name, waitDuration);
+            var message = (token == CancellationToken.None) ? $"Unable to acquire lock {name} immediately"
+                : $"Unable to acquire lock {name} within {waitDuration}";
             throw new LockTimeoutException(Name, name, waitDuration, message);
         }
 
@@ -162,7 +172,7 @@ namespace Gibraltar.DistributedLocking
 
                     if (currentTurnLockId != null && DistributedLockManager.CurrentLockId == currentTurnLockId && candidateLock.ActualLock != null)
                     {
-                        Debug.Write(string.Format("Existing Lock Already Acquired: {0}-{1}", Name, name));
+                        _logger.LogDebug("Existing Lock Already Acquired: {LockManagerName}-{Lock.Name}", Name, name);
                         grantedLock = candidateLock; // It's a secondary lock, so we don't need to queue it or wait.
                         return true;
                     }
@@ -170,7 +180,7 @@ namespace Gibraltar.DistributedLocking
                     // Or is the lock currently held by another thread that we don't want to wait for?
                     if (currentTurnLockId != null && candidateLock.WaitForLock == false)
                     {
-                        Debug.Write(string.Format("Unable to Acquire Lock (can't wait): {0}-{1}", Name, name));
+                        _logger.LogDebug("Unable to Acquire Lock (can't wait): {LockManagerName}-{Lock.Name}", Name, name);
 
                         candidateLock.Dispose(); // We don't want to wait for it, so don't bother queuing an expired request.
                         return false; // Just fail out.
@@ -200,7 +210,7 @@ namespace Gibraltar.DistributedLocking
                 }
             }
 
-            Debug.Write(string.Format(candidateLock == null ? "Unable to Acquire Lock: {0}-{1}" : "Lock Acquired: {0}-{1}", Name, name));
+            _logger.LogDebug(candidateLock == null ? "Unable to Acquire Lock: {0}-{1}" : "Lock Acquired: {0}-{1}", Name, name);
             grantedLock = candidateLock;
             return (grantedLock != null);
         }
@@ -208,11 +218,9 @@ namespace Gibraltar.DistributedLocking
         private CancellationToken GetCancellationToken(int timeoutSeconds)
         {
             //If they specified zero or less for seconds we presume they won't wait and want to immediately timeout.
-            //If greater then use that number of seconds.
+            //If greater than use that number of seconds.
             return timeoutSeconds <= 0 ? CancellationToken.None : new CancellationTokenSource(new TimeSpan(0, 0, timeoutSeconds)).Token;
         }
-
-        #region Event Handlers
 
         private void LockProxy_Disposed(object sender, EventArgs e)
         {
@@ -221,8 +229,7 @@ namespace Gibraltar.DistributedLocking
             var lockKey = disposingProxy.Name;
 
             // Only remove the proxy if the one we're disposing is the one in our collection for that key.
-            DistributedLockProxy actualProxy;
-            if (_proxies.TryRemove(lockKey, out actualProxy))
+            if (_proxies.TryRemove(lockKey, out var actualProxy))
             {
                 if (ReferenceEquals(actualProxy, disposingProxy))
                 {
@@ -233,25 +240,23 @@ namespace Gibraltar.DistributedLocking
                 {
                     //ruh roh; it wasn't us - we need to put that back in.
                     DistributedLockProxy errantProxy = null;
-                    Debug.Write(string.Format("Lock proxy for lock {0} is not our object, re-inserting", lockKey));
+                    _logger.LogDebug("Lock proxy for lock {LockKey} is not our object, re-inserting", lockKey);
                     _proxies.AddOrUpdate(lockKey, actualProxy, (key, proxy) =>
                                                                {
                                                                    errantProxy = proxy;
                                                                    return actualProxy;
                                                                });
 
-                    //we really should merge proxies..
+                    //we really should merge proxies...
                     errantProxy.Dispose();
                 }
             }
             else
             {
                 //we're somehow a dangling proxy; still release our delegate reference so we don't leak.
-                Debug.Write(string.Format("Lock proxy for lock {0} was not in the proxies dictionary.", lockKey));
+                _logger.LogDebug("Lock proxy for lock {LockKey} was not in the proxies dictionary.", lockKey);
                 disposingProxy.Disposed -= LockProxy_Disposed;
             }
         }
-
-        #endregion
     }
 }
